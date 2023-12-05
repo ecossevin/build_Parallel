@@ -177,23 +177,22 @@ def contains_field_api_member(typename):
 			"CPG_DYN_TYPE",
 			"CPG_PHY_TYPE",
 			]
-	return (typename.upper() in containg_field_api)
-#
-#
-#class AddPointerToExistingFieldAPI(Transformation):
-#	# Check if the argument is a member of an existing field api object, and if
-#    # so create a correspongind local pointer pointing to it
-#    def __init__(self, callee, args):
-#	    super().__init__()
-#	self.callee = callee
-#	self.args = args
-#	self.args_in_callee = get_args_decl(callee) #Why????
+	return typename.upper() in containg_field_api
 
-#    def transform_subroutine(self, routine, **kwargs):
-#        variables = FindVariables().visit(routine.spec)
-#    new_vars = []
-#    i = 0
-def AddPointerToExistingFieldAPI(routine,fields, lst_local, lst_dummy, map_var):
+
+class AddPointerToExistingFieldAPI(Transformation):
+	# Check if the argument is a member of an existing field api object, and if
+    # so create a correspongind local pointer pointing to it
+    def __init__(self, callee, args):
+	    super().__init__()
+	self.callee = callee
+	self.args = args
+	self.args_in_callee = get_args_decl(callee) #Why????
+
+    def transform_subroutine(self, routine, **kwargs):
+        variables = FindVariables().visit(routine.spec)
+    new_vars = []
+    i = 0
     for arg in self.args:
         arg_name = str(arg)
         arg_basename = arg_name.split("%")[0]
@@ -201,69 +200,33 @@ def AddPointerToExistingFieldAPI(routine,fields, lst_local, lst_dummy, map_var):
             continue
         for v in routine.variables:
             if arg_basename == v:
-               #if left most type is field api 
-                if contains_field_api_member(v.type.dtype.name):
+                if contains_field_api_member(v.type.dtype.name): #if left most type is field api 
 		    #Dummy args YD_A%B => Z_YD_A_B
                     name = "Z_" + arg_name.replace("%", "_") #Z_YD_...
         	        #if name not in routine.variables:
 			if name not in routine.variables and not in new_vars_inout[name]:
-#                            lst_dummy.append(new_var)
-#A%B%C is type(A)%B%C in fields dict
-			    var_type = fields[v.type.dtype.name+arg_name.split("%")[1:]][0] 
-                            var_name= arg_name.split("%")[:-1]+fields[v.type.dtype.name+arg_name.split("%")[1:]][1]
+                            lst_inout.append(new_var)
+                            t = field.txt[arg_name][kind]
+                            d = field.txt[arg_name][shape]
                             symbols = []
                             #symbols.append(Array(name=name, dimensions=d, type=t))
         	            #lst_dummy.append(VariableDeclaration(symbols=symbols)) #Z_YD_... variables
-			    new_var=irgrip.slurp_any_node(" {var_type}, POINTER :: {var_name}")
+			    new_var=irgrip.slurp_any_node(" {t}, POINTER :: {name}{d}")
 			    lst_dummy.append(new_var) #add all of them at the end, to have them next to each other
-
-                else: 
+		else: 
                     #local var Z => PT, Z
 		    if var.name not in lst_local: #the variable may have already been added to the list from a previous call
-	                var_routine=routine.variable_map[v]
-                        lst_local.append(var.name) 
-                        d = len(var.dimensions)+1 #FIELD_{d}RB
-                        dd = d*":,"
-                        dd = dd[:-1]
-#                        new_var=slurp_any_code(
-#                        new_var=irgrip.insert_at_node(var_routine, new_var, routine.spec)    ## var_routine but var dcl
+	                var=routine.variable_map[v]
+                        new_var=
+                        t = SymbolAttributes(dtype=var.dtype, polymorphic=True, pointer=True, kind=var.kind)
+                        d = tuple(RangeIndex((None, None)) for _ in var.dimensions)
+                        d = d + (d[0],) #one extra dim for blocks 
+                        var => two nodes 
+		        + field_new lst 
 
 
-                        str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
-                        new_var1=irgrip.slurp_any_code(str_node1)
-			routine.spec=irgrip.insert_at_node(new_var1)
-			if var_routine.type.kind:
-                            
-                            str_node2=f"{var_routine.type.dtype.name} (KIND={var_routine.type.kind.name}), POINTER :: {var_routine.name} ({dd})"
-                       # var_routine.type.dtype.name     var.type.kind.name
-		        else:
-                            str_node2=f"{var_routine.type.dtype.name}, POINTER :: {var_routine.name} ({dd})"
-                        new_var2=irgrip.slurp_any_code(str_node2)
-                        routine.spec=irgrip.insert_after_node(new_var1, new_var2, routine.spec)
-                        ubound="["
-                        lbound="["
-                        zero=True #if true, means that lbound=only zero
-			for dim in var_routine.dimensions:
-                            var_routine.
-                            if type(dim)==expression.symbols.DeferredTypeSymbol:
-                                ubound=ubound+dim.name+", "
-				lbound=lbound+"0, "
-                            elif type(dim)==expression.symbols.RangeIndex:
-#                                if type(dim.children[0])==expression.symbols.Sum:
-#                                    lbound=lbound+dim.children[0].children[0].name+
-                                ubound=ubound+dim.children[1].name+", "
-                                if dim.children[0].value!=0:
-                                    zero=False
-                                lbound=lbound+str(dim.children[0].value)+", "
 
-                        ubound=ubound[:-1]+']' #rm last coma
-                        lbound=lbound[:-1]+']' #rm last coma
-                        if zeros:
-                            field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubounds}, PERSISTENT=.TRUE.)"
-                        else:
-                            field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubounds}, LBOUNDS={lbounds}, PERSISTENT=.TRUE.)"
-                        field_node=irgrip.slurp_any_code(field_str)
-                        field_lst.append(field_node)
+
 
 
 def find_new_arg_names(new_args, call, routine):
@@ -287,16 +250,6 @@ def find_new_arg_names(new_args, call, routine):
 
 
 source = Sourcefile.from_file(sys.argv[1])
-field={} #dict associating A%B%C with C type and dim. 
-
-#*********************************************************
-with open('field.txt', 'r') as field_:
-    fields_=file.readlines()
-for line in fields_:
-    field=re.match(("\'([A-Z0-9_%]+)\'.+\'(.+)\'", line)
-    regex="([A-Z]+\(KIND\=[A-Z]+\))(.+)([A-Z]+.+)"
-    fields[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
-    #field['SURFACE_VARIABLES%GSD_VD%VCAPE%T1']=['REAL(KIND=JPRB)',T1(:)]
 for routine in source.routines:
 	need_field_api = set()
     new_routine_name = routine.name + "_PARALLEL"
@@ -378,4 +331,4 @@ for routine in source.routines:
 #    ptf.apply(routine)
 
 
-Sourcefile.to_file(source.to_fortran(), Path("out.F90"))
+#Sourcefile.to_file(source.to_fortran(), Path("out.F90"))
