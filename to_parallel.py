@@ -3,6 +3,34 @@ from loki import *
 from pathlib import Path
 import re
 
+def get_dcls(routine):
+    """
+    
+    """
+    dcls={}
+    variable_map=routine.variable_map
+    decls_map={}
+    for decl in FindNodes(VariableDeclaration).visit(routine.spec):
+        n=0
+        new_decls=()
+        for s in decl.symbols:
+            new_decl=decl.clone(symbols=(s,))
+            new_decls=new_decls+(new_decl,)
+            #new_decls.append(decls.clone(symbols=(s,)))
+            if isinstance(s, symbols.Array):
+                dcls[s.name]=new_decl #map to find var decl when changing it
+              #  n=n+1
+              #  #new_decls.append(decls.clone(symbols=(s,)))
+              #  if n>1:
+              #      new_decls.append(decls.clone(symbols=(s,)))
+                    
+    #    if n>1:
+    #        decls_map[decls]=new_decls
+        decls_map[decl]=new_decls
+    routine.spec=Transformer(decls_map).visit(routine.spec)
+#    dcls[s.name]=decls
+    return(dcls) #dcls map : var.name : var.declaration 
+    
 
 def InsertPragmaRegionInSources(sources):
     routines = sources.routines
@@ -46,10 +74,18 @@ def GetPragmaRegionInRoutine(routine):
     pragma_regions = []
     for region in FindNodes(PragmaRegion).visit(routine.body):
         re_name = re.compile("NAME=(\w+)")
-        name = re_name.search(region.pragma.content)[1]
+        re_name = re_name.search(region.pragma.content)
+        if re_name:
+            name = re_name[1]
+        else:
+            name = None
         re_targets = re.compile("TARGET=([^,]+)")
-        targets = re_targets.search(region.pragma.content)[1]
-        targets = targets.split("/")
+        re_targets = re_targets.search(region.pragma.content)
+        if re_targets:
+            targets = re_targets[1]
+            targets = targets.split("/")
+        else:
+            targets = ['OpenMP','OpenMPSingleColumn','OpenACCSingleColumn']
     	# region.prepend(Comment(text="Début région"))
     	# region.append(Comment(text="Fin région"))
     	# print(fgen(region))
@@ -190,7 +226,7 @@ def contains_field_api_member(typename):
 #        variables = FindVariables().visit(routine.spec)
 #    new_vars = []
 #    i = 0
-def AddPointerToExistingFieldAPI(routine, call, fields, lst_local, lst_dummy, map_var):
+def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls):
     for arg in call.args:
         arg_name = str(arg)
         arg_basename = arg_name.split("%")[0]
@@ -200,15 +236,17 @@ def AddPointerToExistingFieldAPI(routine, call, fields, lst_local, lst_dummy, ma
             if arg_basename == v:
                #if left most type is field api 
                 if contains_field_api_member(v.type.dtype.name):
+#***********************************************************
 		    #Dummy args YD_A%B => Z_YD_A_B
+#***********************************************************
                     name = "Z_" + arg_name.replace("%", "_") #Z_YD_...
         	        #if name not in routine.variables:
                     if name not in routine.variables and name not in new_vars_inout[name]:
                     #if name not in routine.variables and not in new_vars_inout[name]:
 #                            lst_dummy.append(new_var)
-#A%B%C is type(A)%B%C in fields dict
-                        var_type = fields[v.type.dtype.name+arg_name.split("%")[1:]][0] 
-                        var_name= arg_name.split("%")[:-1]+fields[v.type.dtype.name+arg_name.split("%")[1:]][1]
+#A%B%C is type(A)%B%C in map_field dict
+                        var_type = map_field[v.type.dtype.name+arg_name.split("%")[1:]][0] 
+                        var_name= arg_name.split("%")[:-1]+map_field[v.type.dtype.name+arg_name.split("%")[1:]][1]
                         symbols = []
                             #symbols.append(Array(name=name, dimensions=d, type=t))
         	            #lst_dummy.append(VariableDeclaration(symbols=symbols)) #Z_YD_... variables
@@ -216,9 +254,13 @@ def AddPointerToExistingFieldAPI(routine, call, fields, lst_local, lst_dummy, ma
                         lst_dummy.append(new_var) #add all of them at the end, to have them next to each other
 
                 else: 
+#***********************************************************
                     #local var Z => PT, Z
+#***********************************************************
                     if var.name not in lst_local: #the variable may have already been added to the list from a previous call
                         var_routine=routine.variable_map[v]
+                        var_routine_dcl=dcls[var_routine.name]
+                        #var_routine_dcl=dcls[var_routine.name]
                         lst_local.append(var.name) 
                         d = len(var.dimensions)+1 #FIELD_{d}RB
                         dd = d*":,"
@@ -229,7 +271,8 @@ def AddPointerToExistingFieldAPI(routine, call, fields, lst_local, lst_dummy, ma
 
                         str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
                         new_var1=irgrip.slurp_any_code(str_node1)
-                        routine.spec=irgrip.insert_at_node(new_var1)
+                        routine.spec=irgrip.insert_at_node(var_routine_dcl, new_var1, rootnode=routine.spec)
+                        #routine.spec=irgrip.insert_at_node(var_routine, new_var1, rootnode=routine.spec)
                         if var_routine.type.kind:
                             
                             str_node2=f"{var_routine.type.dtype.name} (KIND={var_routine.type.kind.name}), POINTER :: {var_routine.name} ({dd})"
@@ -237,7 +280,7 @@ def AddPointerToExistingFieldAPI(routine, call, fields, lst_local, lst_dummy, ma
                         else:
                             str_node2=f"{var_routine.type.dtype.name}, POINTER :: {var_routine.name} ({dd})"
                         new_var2=irgrip.slurp_any_code(str_node2)
-                        routine.spec=irgrip.insert_after_node(new_var1, new_var2, routine.spec)
+                        routine.spec=irgrip.insert_after_node(new_var1, new_var2, rootnode=routine.spec)
                         ubound="["
                         lbound="["
                         zero=True #if true, means that lbound=only zero
@@ -285,27 +328,57 @@ def find_new_arg_names(new_args, call, routine):
 
 
 source = Sourcefile.from_file(sys.argv[1])
-field={} #dict associating A%B%C with C type and dim. 
 
 #*********************************************************
 #             Creating lst of dim for derive types
 #*********************************************************
 
-with open('field.txt', 'r') as field_:
-    fields_=file.readlines()
-for line in fields_:
-    field=re.match("\'([A-Z0-9_%]+)\'.+\'(.+)\'", line)
-    regex="([A-Z]+\(KIND\=[A-Z]+\))(.+)([A-Z]+.+)"
-    fields[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
-    #field['SURFACE_VARIABLES%GSD_VD%VCAPE%T1']=['REAL(KIND=JPRB)',T1(:)]
+map_field={} #dict associating A%B%C with C type and dim. 
+
+def get_lst_derived_type(map_field):
+    with open('field.txt', 'r') as field_:
+        fields_=field_.readlines()
+    for line in fields_:
+        field=re.match("(\s*)\'([A-Z0-9_%]+)\'.+\'(.+)\'", line)
+        regex="([A-Z]+\s*\(KIND\=[A-Z]+\))(\s:+\s)([A-Z]+.+)"
+        #field.group(1)='          '
+        #field.group(2)='FIELD_VARIABLES%CSPNL%DM'
+        #field.group(3)='REAL(KIND=JPRB) :: DM(:,:)'
+        if field:
+#            print("field match")
+#            print("field=",field)
+#            print("fg3=",field.group(3))
+            match1=re.match(regex,field.group(3)).group(1)
+            match2=re.match(regex, field.group(3)).group(3)
+            #match1=REAL(KIND=JPRB)
+            #match2=DM(:,:)
+            map_field[field.group(2)]=[match1, match2]
+            #map_field[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
+        #fields[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
+        #field['SURFACE_VARIABLES%GSD_VD%VCAPE%T1']=['REAL(KIND=JPRB)',T1(:)]
+get_lst_derived_type(map_field)
+#print(map_field)
+#f=open("map_field.txt", "x")
+#f.write(map_field)
+
+#with open('map_field.txt', 'w') as 
 
 #*********************************************************
 #*********************************************************
+
+import sys
+path_irgrip="/home/cossevine/kilo/src/kilo"
+sys.path.append(path_irgrip)
+import irgrip
+
 
 lst_dummy=[]
 lst_local=[]
 map_var={}
 for routine in source.routines:
+    resolve_associates(routine)
+    dcls=get_dcls(routine)
+    #dcls=[ decl for decl in FindNodes(VariableDeclaration).visit(routine.spec)]
     need_field_api = set()
     new_routine_name = routine.name + "_PARALLEL"
     regions=GetPragmaRegionInRoutine(routine)
@@ -319,20 +392,23 @@ for routine in source.routines:
         calls=[call for call in FindNodes(CallStatement).visit(region["region"])]
 
 
-    name=region['name']
-    subname=routine.name
-    code=code=f"IF (LHOOK) CALL DR_HOOK ('{subname}:{name}',0,ZHOOK_HANDLE_PARALLEL)"
-    new_node=irgrip.slurm_any_code(code)
-    new_routine=irgrip.insert_at_node(Pragma, new_node, rootnode=routine.body)
-    #new_node=irgrip.insert_at_node(Pragma, node, rootnode=routine.body)
-    new_node=old_node
-    #new_node=irgrip.insert_at_node(PragmaRegions[i], 
-    new_args = dict()
-    for target in region['targets']:
-        codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
-        new_node=irgrip.slurp_any_code(codetarget)
-        new_routine=irgrip.insert_after_node(old_node, new_node, rootnode=new_routine.body)
+        name=region['name']
+        subname=routine.name
+        code=code=f"IF (LHOOK) CALL DR_HOOK ('{subname}:{name}',0,ZHOOK_HANDLE_PARALLEL)"
+        new_node=irgrip.slurp_any_code(code)
+        new_routine=routine.clone()
+        new_routine.body=irgrip.insert_at_node(Pragma, new_node, rootnode=routine.body)
+        #new_node=irgrip.insert_at_node(Pragma, node, rootnode=routine.body)
         old_node=new_node
+        #new_node=old_node
+        #new_node=irgrip.insert_at_node(PragmaRegions[i], 
+        new_args = dict()
+
+        for target in region['targets']:
+            codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
+            new_node=irgrip.slurp_any_code(codetarget)
+            new_routine.body=irgrip.insert_after_node(old_node, new_node, rootnode=new_routine.body)
+            old_node=new_node
     
     
         
@@ -349,7 +425,7 @@ for routine in source.routines:
         #     continue
        # AddPointerToExistingFieldAPI(call.name, call.arguments)
         for call in calls:
-            AddPointerToExistingFieldAPI(routine, call, fields, lst_local, lst_dummy, map_var)
+            AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls)
 #            args_callee = get_callee_args_of(call.name)
 #
 #            local_vars = get_local_varnames(routine)
