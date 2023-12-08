@@ -7,6 +7,10 @@ def get_dcls(routine):
     """
     
     """
+
+#    verbose=False
+    verbose=True
+
     dcls={}
     variable_map=routine.variable_map
     decls_map={}
@@ -28,6 +32,7 @@ def get_dcls(routine):
     #        decls_map[decls]=new_decls
         decls_map[decl]=new_decls
     routine.spec=Transformer(decls_map).visit(routine.spec)
+    if verbose: print("dcls= ", dcls)   
 #    dcls[s.name]=decls
     return(dcls) #dcls map : var.name : var.declaration 
     
@@ -204,6 +209,12 @@ def get_args_decl(subname):
 #    return list(local_var)
 #
 
+def contains_ignore(typename):
+#    contain = ["GEOMETRY", "CPG_BNDS_TYPE", "CPG_OPTS_TYPE", "CPG_MISC_TYPE", "CPG_GPAR_TYPE", "CPG_PHY_TYPE", "MF_PHYS_TYPE", "MF_PHYS_SURF_TYPE", "CPG_SL2_TYPE", "FIELD_VARIABLES", "MODEL", "TYP_DDH"]
+    contains_ignore = ["MODEL", "GEOMETRY", "CPG_BNDS_TYPE"]
+    return (typename.upper() in contains_ignore)
+
+
 def contains_field_api_member(typename):
     containg_field_api = [
         "FIELD_VARIABLES",
@@ -226,85 +237,135 @@ def contains_field_api_member(typename):
 #        variables = FindVariables().visit(routine.spec)
 #    new_vars = []
 #    i = 0
-def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls):
-    for arg in call.args:
-        arg_name = str(arg)
+def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls):
+        #def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls):
+    """
+    :param routine:.
+    :param call: call statement on which args are changed 
+    :param map_field: {leftmost.type%A%B%C : type, kind and size of C}
+    #???!!! FIELD_NEW where???!!!
+    :param lst_local: lst names of local vars of the caller that were already changed
+    :param lst_dummy: lst of dummy args of the caller that were already changed
+    :param map_dummy: dummy_new_name : dummy_new_var
+    :param map_var: var : {var.name : var.declaration}, in order to find the node where var is delcared
+    :param dcls: === map_var????
+    :param field_new_lst: nodes of FIELD_NEW...
+    """
+    verbose=True
+    #verbose=False
+    print("call.name=", call.name)
+    """
+    arg
+    v left most derive type of arg or arg
+
+
+    """
+    for arg in call.arguments:
+        arg_name=arg.name
         arg_basename = arg_name.split("%")[0]
+        print("arg_name= ", arg_name)  
+        print("arg_basename= ", arg_basename)  
         if arg_basename not in routine.variables:
             continue
+            print("arg_basename= ", arg_basename, "not in routine.variables")
         for v in routine.variables:
-            if arg_basename == v:
+            if arg_basename == v.name: #if left most type (or directly var if no derived type) is in routine variables, useless? Direclty catch the routine var through routine_map???
                #if left most type is field api 
+
+#***********************************************************
+                #1) DUMMY ARGS of the caller
+     		    #Dummy args YD_A%B => Z_YD_A_B
+                #build a dict of new fields and add them to the routine spec after analysing all the calls
                 if contains_field_api_member(v.type.dtype.name):
 #***********************************************************
-		    #Dummy args YD_A%B => Z_YD_A_B
-#***********************************************************
+
+                    if verbose: print("Dummy arg:", arg_name)
                     name = "Z_" + arg_name.replace("%", "_") #Z_YD_...
         	        #if name not in routine.variables:
-                    if name not in routine.variables and name not in new_vars_inout[name]:
+                    if name not in routine.variables and name not in map_dummy: #if var was already added to list of dummy var to changed or already in routine variables
                     #if name not in routine.variables and not in new_vars_inout[name]:
 #                            lst_dummy.append(new_var)
 #A%B%C is type(A)%B%C in map_field dict
-                        var_type = map_field[v.type.dtype.name+arg_name.split("%")[1:]][0] 
-                        var_name= arg_name.split("%")[:-1]+map_field[v.type.dtype.name+arg_name.split("%")[1:]][1]
-                        symbols = []
+                        new_var_type = map_field[v.type.dtype.name+arg_name.split("%")[1:]][0] 
+                        new_var_name= arg_name.split("%")[:-1]+map_field[v.type.dtype.name+arg_name.split("%")[1:]][1]   #A%B%C => A%B%C(:,:,:)
+                         #symbols = []
                             #symbols.append(Array(name=name, dimensions=d, type=t))
         	            #lst_dummy.append(VariableDeclaration(symbols=symbols)) #Z_YD_... variables
-                        new_var=irgrip.slurp_any_node(" {var_type}, POINTER :: {var_name}")
+                        new_var=irgrip.slurp_any_node("{new_var_type}, POINTER :: {new_var_name}")
                         lst_dummy.append(new_var) #add all of them at the end, to have them next to each other
+                        map_dummy.append[new_var_name]=new_var                         
 
+#***********************************************************
+                #2) LOCAL ARGS of the caller
+                #local var Z => PT, Z
+                #build an array with the name of the arrays that were changed, replace the arrays gradually
                 else: 
 #***********************************************************
-                    #local var Z => PT, Z
-#***********************************************************
-                    if var.name not in lst_local: #the variable may have already been added to the list from a previous call
-                        var_routine=routine.variable_map[v]
-                        var_routine_dcl=dcls[var_routine.name]
-                        #var_routine_dcl=dcls[var_routine.name]
-                        lst_local.append(var.name) 
-                        d = len(var.dimensions)+1 #FIELD_{d}RB
-                        dd = d*":,"
-                        dd = dd[:-1]
-#                        new_var=slurp_any_code(
-#                        new_var=irgrip.insert_at_node(var_routine, new_var, routine.spec)    ## var_routine but var dcl
+
+                    if v.name not in lst_local: #the variable may have already been added to the list from a previous call, arg_basename == v.name should be false if arg is already in lst_local
+                        if not contains_ignore(v.type.dtype.name):
+                            var_routine=v
+                            lst_local.append(v.name)
+                            if verbose: print("Local var:", v.name)
+#                            var_routine=routine.variable_map[v]
+                            v_dcl=dcls[v.name]
+                            #var_routine_dcl=dcls[var_routine.name]
+                            d = len(v.dimensions)+1 #FIELD_{d}RB
+                            dd = d*":,"
+                            dd = dd[:-1]
+#                            new_var=slurp_any_code(
+#                            new_var=irgrip.insert_at_node(var_routine, new_var, routine.spec)    ## var_routine but var dcl
 
 
-                        str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
-                        new_var1=irgrip.slurp_any_code(str_node1)
-                        routine.spec=irgrip.insert_at_node(var_routine_dcl, new_var1, rootnode=routine.spec)
-                        #routine.spec=irgrip.insert_at_node(var_routine, new_var1, rootnode=routine.spec)
-                        if var_routine.type.kind:
-                            
-                            str_node2=f"{var_routine.type.dtype.name} (KIND={var_routine.type.kind.name}), POINTER :: {var_routine.name} ({dd})"
-                       # var_routine.type.dtype.name     var.type.kind.name
-                        else:
-                            str_node2=f"{var_routine.type.dtype.name}, POINTER :: {var_routine.name} ({dd})"
-                        new_var2=irgrip.slurp_any_code(str_node2)
-                        routine.spec=irgrip.insert_after_node(new_var1, new_var2, rootnode=routine.spec)
-                        ubound="["
-                        lbound="["
-                        zero=True #if true, means that lbound=only zero
-                        for dim in var_routine.dimensions:
-                            #var_routine
-                            if type(dim)==expression.symbols.DeferredTypeSymbol:
-                                ubound=ubound+dim.name+", "
-                                lbound=lbound+"0, "
-                            elif type(dim)==expression.symbols.RangeIndex:
-#                                if type(dim.children[0])==expression.symbols.Sum:
-#                                    lbound=lbound+dim.children[0].children[0].name+
-                                ubound=ubound+dim.children[1].name+", "
-                                if dim.children[0].value!=0:
-                                    zero=False
-                                lbound=lbound+str(dim.children[0].value)+", "
-
-                        ubound=ubound[:-1]+']' #rm last coma
-                        lbound=lbound[:-1]+']' #rm last coma
-                        if zeros:
-                            field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubounds}, PERSISTENT=.TRUE.)"
-                        else:
-                            field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubounds}, LBOUNDS={lbounds}, PERSISTENT=.TRUE.)"
-                        field_node=irgrip.slurp_any_code(field_str)
-                        field_lst.append(field_node)
+                            str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
+                            new_var1=irgrip.slurp_any_code(str_node1)
+                            routine.spec=irgrip.insert_at_node(v_dcl, new_var1, rootnode=routine.spec)
+                            #routine.spec=irgrip.insert_at_node(var_routine, new_var1, rootnode=routine.spec)
+                            if var_routine.type.kind:
+                                
+                                str_node2=f"{var_routine.type.dtype.name} (KIND={var_routine.type.kind.name}), POINTER :: {var_routine.name} ({dd})"
+                       #     var_routine.type.dtype.name     var.type.kind.name
+                            else:
+                                str_node2=f"{var_routine.type.dtype.name}, POINTER :: {var_routine.name} ({dd})"
+                            new_var2=irgrip.slurp_any_code(str_node2)
+                            routine.spec=irgrip.insert_after_node(new_var1, new_var2, rootnode=routine.spec)
+                            ubound="["
+                            lbound="["
+                            zero=True #if true, means that lbound=only zero
+                            for dim in var_routine.dimensions:
+                                new_dim=False
+                                is_lbound=False
+                                regex="(.*):(.*)"
+                                str_dim=fgen(dim)
+                                new_dim=re.match(regex, str_dim)
+                                if new_dim:
+                                    is_lbound=True
+                                    ubound=ubound+new_dim.group(2)+", "
+                                    lbound=lbound+new_dim.group(1)+", "
+                                else:
+                                    ubound=ubound+new_dim+", "
+                                    lbound=lbound+"0, "
+                                    
+                                #var_routine
+#                                if type(dim)==expression.symbols.DeferredTypeSymbol:
+#                                    ubound=ubound+dim.name+", "
+#                                    lbound=lbound+"0, "
+#                                elif type(dim)==expression.symbols.RangeIndex:
+##                                    if type(dim.children[0])==expression.symbols.Sum:
+##                                        lbound=lbound+dim.children[0].children[0].name+
+#                                    ubound=ubound+dim.children[1].name+", "
+#                                    if dim.children[0].value!=0:
+#                                        zero=False
+#                                    lbound=lbound+str(dim.children[0].value)+", "
+#
+                            ubound=ubound[:-1]+']' #rm last coma
+                            lbound=lbound[:-1]+']' #rm last coma
+                            if not is_lbound:
+                                field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubounds}, PERSISTENT=.TRUE.)"
+                            else:
+                                field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubounds}, LBOUNDS={lbounds}, PERSISTENT=.TRUE.)"
+                            field_node=irgrip.slurp_any_code(field_str)
+                            field_lst.append(field_node)
 
 
 def find_new_arg_names(new_args, call, routine):
@@ -333,7 +394,6 @@ source = Sourcefile.from_file(sys.argv[1])
 #             Creating lst of dim for derive types
 #*********************************************************
 
-map_field={} #dict associating A%B%C with C type and dim. 
 
 def get_lst_derived_type(map_field):
     with open('field.txt', 'r') as field_:
@@ -353,9 +413,11 @@ def get_lst_derived_type(map_field):
             #match1=REAL(KIND=JPRB)
             #match2=DM(:,:)
             map_field[field.group(2)]=[match1, match2]
+
             #map_field[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
         #fields[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
         #field['SURFACE_VARIABLES%GSD_VD%VCAPE%T1']=['REAL(KIND=JPRB)',T1(:)]
+map_field={} #dict associating A%B%C with C type and dim. 
 get_lst_derived_type(map_field)
 #print(map_field)
 #f=open("map_field.txt", "x")
@@ -374,7 +436,8 @@ import irgrip
 
 lst_dummy=[]
 lst_local=[]
-map_var={}
+field_new_lst=[]
+map_dummy={}
 for routine in source.routines:
     resolve_associates(routine)
     dcls=get_dcls(routine)
@@ -425,7 +488,7 @@ for routine in source.routines:
         #     continue
        # AddPointerToExistingFieldAPI(call.name, call.arguments)
         for call in calls:
-            AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls)
+            AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls)
 #            args_callee = get_callee_args_of(call.name)
 #
 #            local_vars = get_local_varnames(routine)
@@ -449,7 +512,7 @@ for routine in source.routines:
 #                    vmap[arg] = arg
 #            call = SubstituteExpressions(vmap).visit(call)
 #
-#            reg["region"].prepend(call)
+#            regAddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, field_new_lst, dcls)["region"].prepend(call)
 #            reg["region"].prepend(Comment(text=omp_target))
 #
 #        ifguard = f"IF (LHOOK) CALL DR_HOOK ('{new_routine_name}:{reg['name']}',0,ZHOOK_HANDLE_PARALLEL)"
