@@ -29,7 +29,7 @@ def get_dcls(routine, lst_horizontal_size):
 #    dcls[s.name]=decls
     return(dcls) #dcls map : var.name : var.declaration 
 
-def change_arrays(routine, dcls, lst_horizontal_size):
+def change_arrays(routine, dcls, lst_horizontal_size, dict_dim_array, region_vars, region_vars):
     """
     Changes NPROMA arrays into field api objects.
     :param dcls: dict of NRPOMA arrays declarations to change.
@@ -39,8 +39,11 @@ def change_arrays(routine, dcls, lst_horizontal_size):
                         #local var Z => PT, Z
                         #build an array with the name of the arrays that were changed, replace the arrays gradually
 #*******        ************************************************
-
+    verbose=False
+    #verbose=True
+    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)")
     field_new_lst=()
+    field_new_lst=field_new_lst+new_node
     for dcl in dcls:
         var_dcl=dcls[dcl]
         var=var_dcl.symbols[0]
@@ -48,6 +51,8 @@ def change_arrays(routine, dcls, lst_horizontal_size):
         d = len(var.dimensions)+1 #FIELD_{d}RB
         dd = d*":,"
         dd = dd[:-1]
+        dict_dim_array[var.name]=dd
+        region_vars[var.name]="YL_"+var_routine.name
         str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
         new_var1=irgrip.slurp_any_code(str_node1)
         if var_routine.type.kind:
@@ -68,9 +73,9 @@ def change_arrays(routine, dcls, lst_horizontal_size):
             regex="(.*):(.*)"
             str_dim=fgen(dim)
             new_dim=re.match(regex, str_dim)
-            print("str_dim= ", str_dim) 
+            if verbose: print("str_dim= ", str_dim) 
             if new_dim:
-                print("new_dim= ", new_dim) 
+                if verbose: print("new_dim= ", new_dim) 
                 is_lbound=True
                 ubound=ubound+new_dim.group(2)+", "
                 lbound=lbound+new_dim.group(1)+", "
@@ -85,22 +90,24 @@ def change_arrays(routine, dcls, lst_horizontal_size):
             field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubound}, PERSISTENT=.TRUE.)"
         else:
             field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubound}, LBOUNDS={lbound}, PERSISTENT=.TRUE.)"
-        print("field_str= ", field_str) 
+        if verbose: print("field_str= ", field_str) 
         field_node=irgrip.slurp_any_code(field_str)
         #field_new_lst.append(field_node)
         field_new_lst=field_new_lst+field_node
         #field_lst.append(field_node)
         
                 
-    #change NPROMA array name in the routine body 
-    variable_map={}
-    for var in FindVariables().visit(routine.body):
-        if var.name in dcls:
-            variable_map[var]=var.clone(name="YL_"+var.name) 
-    routine.body = SubstituteExpressions(variable_map).visit(routine.body)
+    #change NPROMA array name in the routine body  => NO 
+    ##########variable_map={}
+    ##########for var in FindVariables().visit(routine.body):
+    ##########    if var.name in dcls:
+    ##########        variable_map[var]=var.clone(name="YL_"+var.name) 
+    ##########routine.body = SubstituteExpressions(variable_map).visit(routine.body)
   
+    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',1,ZHOOK_HANDLE_FIELD_API)")
+    field_new_lst+new_node
     routine.body.insert(1, field_new_lst) #insert at 1 => after first LHOOK 
-   
+       
 
 def InsertPragmaRegionInSources(sources):
     routines = sources.routines
@@ -276,7 +283,7 @@ def get_args_decl(subname):
 
 def contains_ignore(typename):
 #    contain = ["GEOMETRY", "CPG_BNDS_TYPE", "CPG_OPTS_TYPE", "CPG_MISC_TYPE", "CPG_GPAR_TYPE", "CPG_PHY_TYPE", "MF_PHYS_TYPE", "MF_PHYS_SURF_TYPE", "CPG_SL2_TYPE", "FIELD_VARIABLES", "MODEL", "TYP_DDH"]
-    contains_ignore = ["MODEL", "GEOMETRY", "CPG_BNDS_TYPE"]
+    contains_ignore = ["MODEL", "GEOMETRY", "CPG_BNDS_TYPE", "CPG_OPTS_TYPE"]
     return (typename.upper() in contains_ignore)
 
 
@@ -302,7 +309,8 @@ def contains_field_api_member(typename):
 #        variables = FindVariables().visit(routine.spec)
 #    new_vars = []
 #    i = 0
-def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls):
+def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls, lst_dummy_old, dict_dummy_dim):
+def compute_call(routine, field_index, 
         #def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls):
     """
     :param routine:.
@@ -315,6 +323,7 @@ def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy,
  ###   :param map_var: 
     :param dcls: var : {var.name : var.declaration}, in order to find the node where var is delcared
     :param field_new_lst: nodes of FIELD_NEW...
+    :param lst_dummy_old: lst of var name that were already added to caller spec 
     """
     verbose=True
     #verbose=False
@@ -330,46 +339,108 @@ def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy,
         if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
 
             arg_name=arg.name
-            arg_basename = arg_name.split("%")[0]
-            for v in routine.variables:
-                if arg_basename == v.name: #if left most type (or directly var if no derived type) is in routine variables, useless? Direclty catch the routine var through routine_map???
-                       #if left most type is field api 
-                    if '%' in arg_name:
-                        print("arg_name= ", arg_name)  
-                        print("arg_basename= ", arg_basename)  
-                        if arg_basename not in routine.variables:
-                            continue
-                            print("arg_basename= ", arg_basename, "not in routine.variables")
+            arg_name_old=arg.name
+            if (arg_name not in lst_dummy_old): #don't create new var if already exist 
+                arg_basename = arg_name.split("%")[0]
+                for v in routine.variables:
+                    if arg_basename == v.name: #if left most type (or directly var if no derived type) is in routine variables, useless? Direclty catch the routine var through routine_map???
+                           #if left most type is field api 
+                        if '%' in arg_name:
+                            arg_name_='%'.join(arg_name.split("%")[1:])
+                            #*************************************************************
+                            #*************************************************************
+                            #           look in index table
+                            #      field is in field api
+                            if v.type.dtype.name+'%'+arg_name_ in map_field:
+                                #*************************************************************
+                                #*************************************************************
+                                print("arg_name= ", arg_name)  
+                                print("arg_basename= ", arg_basename)  
+                                if arg_basename not in routine.variables:
+                                    continue
+                                    print("arg_basename= ", arg_basename, "not in routine.variables")
+        
+        #*******        ****************************************************
+                                #1) DUMMY ARGS of the caller
+             	        	    #Dummy args YD_A%B => Z_YD_A_B
+                                #build a dict of new fields and add them to the routine spec after analysing all the calls
+                                #if contains_field_api_member(v.type.dtype.name):
+                                if not contains_ignore(v.type.dtype.name): # ===> REMOVE????!!!!!
+        #*******        ****************************************************
+        
+                                    if verbose: print("Dummy arg:", arg_name)
+                                    name = "Z_" + arg_name.replace("%", "_") #Z_YD_...
+                                    region_vars[name]=arg_name
+              #### SHOULD BE USELESS NOW                      if name not in routine.variables and name not in map_dummy: #if var was already added to list of dummy var to changed or already in routine variables
+        #A%B%C i        s type(A)%B%C in map_field dict
+                                    new_var_type = map_field[v.type.dtype.name+'%'+arg_name_][0] # STRUCT%A%B => STRUCT_TYPE%A%B
+                                    #new_var_name= 'Z_'+'_'.join(arg_name.split("%")[:-1])+'_'+map_field[v.type.dtype.name+'%'+arg_name_][1][:-1]+",:)"   #A%B%C => A%B%C(:,:,:)
+                                    d=map_field[v.type.dtype.name+'%'+arg_name_][1][:-1]+",:)"
+                                    dd=re.match("([A-Z0-9]*)(.*)", d)
+                                    dict_dummy_dim[arg_name_old]=dd
+                                    new_var_name= 'Z_'+'_'.join(arg_name.split("%")[:-1])+'_'+d  #A%B%C => A%B%C(:,:,:)
+                                    print("new_var_name= ", new_var_name) 
+                                    print("new_var_type= ", new_var_type) 
+                                    new_var=irgrip.slurp_any_code(f"{new_var_type}, POINTER :: {new_var_name}")
+                                    print("new_var= ", new_var) 
+                                    lst_dummy.append(new_var) #add all of them at the end, to have them next to each other
+                                    map_dummy[new_var_name]=new_var
+                                    lst_dummy_old.append(arg_name_old)
+                                    routine.spec.insert(-2, new_var)
+                                #*************************************************************
+                                #*************************************************************
+                                #           look in index table
+                            #     var isn't in field api 
+                            else:   
+                            #*************************************************************
+                            #*************************************************************
+                                print("=======================================================")
+                                print("Argument = ", arg_name, "not in field api index!!!")
+                                print("=======================================================")
+            elif (isinstance(v, symbols.Scalar)):
+                lst_scalar.append(v)
+def change_dummy_body(routine, lst_dummy_old):
+    """
+    Replace A%B%C by Z_A_B_C in the routine body according to the list lst_dummy_old
+    :param routine:.
+    :param lst_dummy_old: list of var to change
+    """
+    verbose=False
+    variable_map={}          
+    for var in FindVariables().visit(routine.body):
+        if var.name in lst_dummy_old: 
+            new_name="Z_"+var.name.replace("%", "_")
+            if verbose: print("var.name= ", var.name)
+            if verbose: print("new_name= ", new_name)
 
-#*******        ****************************************************
-                        #1) DUMMY ARGS of the caller
-     	        	    #Dummy args YD_A%B => Z_YD_A_B
-                        #build a dict of new fields and add them to the routine spec after analysing all the calls
-                        if contains_field_api_member(v.type.dtype.name):
-#*******        ****************************************************
+            variable_map[var]=var.clone(name=new_name)
+    routine.body = SubstituteExpressions(variable_map).visit(routine.body)
 
-                            if verbose: print("Dummy arg:", arg_name)
-                            name = "Z_" + arg_name.replace("%", "_") #Z_YD_...
-                	        #if name not in routine.variables:
-      #### SHOULD BE USELESS NOW                      if name not in routine.variables and name not in map_dummy: #if var was already added to list of dummy var to changed or already in routine variables
-                            #if name not in routine.variables and not in new_vars_inout[name]:
-#                                    lst_dummy.append(new_var)
-#A%B%C i        s type(A)%B%C in map_field dict
-                                print("AAarg_name = ", arg_name)
-                                print("arg_name.split = ", arg_name.split("%")[1:])
-                                print("v.type.dtype.name = ", v.type.dtype.name)
-                                arg_name_='%'.join(arg_name.split("%")[1:])
-                                new_var_type = map_field[v.type.dtype.name+'%'+arg_name_][0] 
-                                new_var_name= arg_name_+map_field[v.type.dtype.name+'%'+arg_name_][1]   #A%B%C => A%B%C(:,:,:)
-                                 #symbols = []
-                                    #symbols.append(Array(name=name, dimensions=d, type=t))
-                	            #lst_dummy.append(VariableDeclaration(symbols=symbols)) #Z_YD_... variables
-                                new_var=irgrip.slurp_any_code("{new_var_type}, POINTER :: {new_var_name}")
-                                lst_dummy.append(new_var) #add all of them at the end, to have them next to each other
-                                map_dummy[new_var_name]=new_var                         
 
-        elif (isinstance(v, symbols.Scalar)):
-            lst_scalar.append(v)
+def generate_get_data():
+    """
+    machine : HOST or  DEVICE
+    region_vars : var of the call of the region.  #lhs => get_data(rhs) : region_vars[lhs]=rhs
+    intent[lhs] : RDWR or RDONLY for lhs
+    """
+    lst_get_data=()
+    codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
+    new_node=irgrip.slurp_any_code(codetarget)
+    lst_get_data=lst_get_data+new_code
+    newcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:GET_DATA',0,ZHOOK_HANDLE_FIELD_API)"
+    newnode=irgrip/slurp_any_code(newcode)
+    lst_get_data=lst_get_data+newnode
+    for var in call.args:
+        if var is in
+    for var in region_vars: #lhs => get_data(rhs) : region_vars[lhs]=rhs
+        lhs=var
+        newcode="{lhs} => GET_{machine}_DATA_{intent[lhs]} ({region_vars[lhs]})"
+        newnode=irgrip.slurp_any_code(newcode)
+        lst_get_data=lst_get_data+newnode
+      
+    newcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:GET_DATA',0,ZHOOK_HANDLE_FIELD_API)"
+    newnode=irgrip.slurp_any_code(newcode)
+    lst_get_date=lst_get_data+newnode
 
 def find_new_arg_names(new_args, call, routine):
     """
@@ -398,30 +469,6 @@ source = Sourcefile.from_file(sys.argv[1])
 #*********************************************************
 
 
-def get_lst_derived_type(map_field):
-    with open('field.txt', 'r') as field_:
-        fields_=field_.readlines()
-    for line in fields_:
-        field=re.match("(\s*)\'([A-Z0-9_%]+)\'.+\'(.+)\'", line)
-        regex="([A-Z]+\s*\(KIND\=[A-Z]+\))(\s:+\s)([A-Z]+.+)"
-        #field.group(1)='          '
-        #field.group(2)='FIELD_VARIABLES%CSPNL%DM'
-        #field.group(3)='REAL(KIND=JPRB) :: DM(:,:)'
-        if field:
-#            print("field match")
-#            print("field=",field)
-#            print("fg3=",field.group(3))
-            match1=re.match(regex,field.group(3)).group(1)
-            match2=re.match(regex, field.group(3)).group(3)
-            #match1=REAL(KIND=JPRB)
-            #match2=DM(:,:)
-            map_field[field.group(2)]=[match1, match2]
-
-            #map_field[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
-        #fields[field.group(1)]=[re.match(regex,field.group(2)).group(1), re.match(regex, field.group(2)).group(3)]
-        #field['SURFACE_VARIABLES%GSD_VD%VCAPE%T1']=['REAL(KIND=JPRB)',T1(:)]
-map_field={} #dict associating A%B%C with C type and dim. 
-get_lst_derived_type(map_field)
 #print(map_field)
 #f=open("map_field.txt", "x")
 #f.write(map_field)
@@ -438,23 +485,32 @@ import irgrip
 
 import logical_lst
 import logical
+import pickle
 
 lst_horizontal_size=["KLON","YDCPG_OPTS%KLON","YDGEOMETRY%YRDIM%NPROMA","KPROMA", "YDDIM%NPROMA", "NPROMA"]
 true_symbols, false_symbols = logical_lst.symbols()
 false_symbols.append('LHOOK')
+
+with open('field_index.pkl', 'rb') as fp:
+    map_field= pickle.load(fp)
 lst_dummy=[]
 lst_local=[]
 field_new_lst=() 
 map_dummy={}
+dict_dim_array={}
+dict_dummy_dim={}
+lst_dummy_old=[]
+region_vars={}
 for routine in source.routines:
     logical.transform_subroutine(routine, true_symbols, false_symbols)
     resolve_associates(routine)
 
     dcls=get_dcls(routine, lst_horizontal_size)
-    change_arrays(routine, dcls, lst_horizontal_size)
+    change_arrays(routine, dcls, lst_horizontal_size, dict_dim_array, region_vars)
     #dcls=[ decl for decl in FindNodes(VariableDeclaration).visit(routine.spec)]
     need_field_api = set()
     new_routine_name = routine.name + "_PARALLEL"
+    exit(1)
     regions=GetPragmaRegionInRoutine(routine)
     PragmaRegions=FindNodes(PragmaRegion).visit(routine.body)
     for i in range(len(regions)):
@@ -479,13 +535,15 @@ for routine in source.routines:
         new_args = dict()
 
         for target in region['targets']:
+            new_section_target=()
             codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
             new_node=irgrip.slurp_any_code(codetarget)
+            new_section=new_section+codetarget
             new_routine.body=irgrip.insert_after_node(old_node, new_node, rootnode=new_routine.body)
             old_node=new_node
     
     
-        
+     
        # if target=='OPENMP':
        # else if target=='OPENMPSINGLECOLUMN':
        # else if target=='OPENACCSINGLECOLUMN':
@@ -499,7 +557,8 @@ for routine in source.routines:
         #     continue
        # AddPointerToExistingFieldAPI(call.name, call.arguments)
         for call in calls:
-            AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls)
+            AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls, lst_dummy_old, dict_dummy_dim, region_vars)
+    
 #            args_callee = get_callee_args_of(call.name)
 #
 #            local_vars = get_local_varnames(routine)
@@ -534,5 +593,5 @@ for routine in source.routines:
 #    ptf = PointerToField(need_field_api)
 #    ptf.apply(routine)
 
-
+        change_dummy_body(routine, lst_dummy_old)
 Sourcefile.to_file(source.to_fortran(), Path("src/out.F90"))
