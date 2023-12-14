@@ -309,22 +309,91 @@ def contains_field_api_member(typename):
 #        variables = FindVariables().visit(routine.spec)
 #    new_vars = []
 #    i = 0
-def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls, lst_dummy_old, dict_dummy_dim):
+#def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls, lst_dummy_old, dict_dummy_dim):
+ 
+
+
+
+
+
+
+
+
+
+
+
 def compute_call(routine, field_index, 
-        #def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls):
     """
     :param routine:.
-    :param call: call statement on which args are changed 
-    :param map_field: {leftmost.type%A%B%C : type, kind and size of C}
-    #???!!! FIELD_NEW where???!!!
-    :param lst_local: lst names of local vars of the caller that were already changed
-    :param lst_dummy: lst of dummy args of the caller that were already changed
-    :param map_dummy: dummy_new_name : dummy_new_var
- ###   :param map_var: 
-    :param dcls: var : {var.name : var.declaration}, in order to find the node where var is delcared
-    :param field_new_lst: nodes of FIELD_NEW...
-    :param lst_dummy_old: lst of var name that were already added to caller spec 
+    :param field_index: index of field api struct members 
+    :param call_arrays: mapping of names. call_arrays[Z_...]=YL_Z...; call_arrays[Z_A_B_C...]=A%B%C
+    :param call_scalar
+    :param ???
+    :param lst_derive_type: lst of derived type that were already added to the routine spec
+    :param dcls: maps the derive type name with its declaration in order to insert new dcl node at theright place
     """
+    for arg in call.arguments:
+        #arg can be logical and/or: "YDCPG_OPTS%YRSURF_DIMS%YSD_VVD%NUMFLDS>=8.AND.YDMODEL%YRML_PHY_MF%YRPHY"
+        if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
+            arg_name=arg.name
+            if '%' in arg_name: # 1) derive_type already on lst_derive_type, 2) derive_type in index, 3) derive_type CPG_OPTS_TYPE 
+                arg_basename=arg_name.split("%")[0]
+                var_routine=routine.variable_map[arg_basename]
+                arg_name_=arg_name_='%'.join(arg_name.split("%")[1:])
+                if arg_name in lst_derive_type: #1) derive_type already on lst_derive_type
+                    new_name="Z_"+arg_name.replace("%","_")
+                    call_arrays[new_name]=arg_name
+                    new_arg=arg.clone(name=new_name) #TODO :::::: BOUNDS!!!!!!!!! with blcks!
+                elif arg_name in var_routine.type.dtype.name+"%"+arg_name_ in field_index: #2) derive_type in index 
+                    new_name="Z_"+arg_name.replace("%","_")
+                    call_arrays[new_name]=arg_name
+                    new_arg=arg.clone(name=new_name) #TODO :::::: BOUNDS!!!!!!!!! with blcks!
+                    lst_derive_type.append(arg_name)
+                    key=v.type.dtype.name+'%'+arg_name_] 
+                    new_var_type = field_index[key][0] 
+                    d=map_field[key][1][:-1]+",:)"
+                    dd=re.match("([A-Z0-9]*)(.*)", d)
+                    new_var_name= 'Z_'+'_'.join(arg_name.split("%")[:-1])+'_'+d  #A%B%C => A%B%C(:,:,:)
+                    new_var=irgrip.slurp_any_code(f"{new_var_type}, POINTER :: {new_var_name}")
+                    routine.spec.insert(-2, new_var)
+                elif (var_routine.type.dtype.upper() in ["CPG_OPTS_TYPE"]):
+                    #TODO
+                else: #derive_type not field_api and not CPG_OPTS_TYPE                               
+                    print("====================================================================")
+                    print("Argument = ", arg_name, "not in field api index, neither CPG_OPTS_TYPE!!!")
+                    print("====================================================================")
+
+            else: #if call arg is a scalar, shouldn't be an array
+        else: #if call arg is logical or/and
+       
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#        #def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls):
+#    """
+#    :param routine:.
+#    :param call: call statement on which args are changed 
+#    :param map_field: {leftmost.type%A%B%C : type, kind and size of C}
+#    #???!!! FIELD_NEW where???!!!
+#    :param lst_local: lst names of local vars of the caller that were already changed
+#    :param lst_dummy: lst of dummy args of the caller that were already changed
+#    :param map_dummy: dummy_new_name : dummy_new_var
+# ###   :param map_var: 
+#    :param dcls: var : {var.name : var.declaration}, in order to find the node where var is delcared
+#    :param field_new_lst: nodes of FIELD_NEW...
+#    :param lst_dummy_old: lst of var name that were already added to caller spec 
+#    """
     verbose=True
     #verbose=False
     print("call.name=", call.name)
