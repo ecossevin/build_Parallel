@@ -29,7 +29,7 @@ def get_dcls(routine, lst_horizontal_size):
 #    dcls[s.name]=decls
     return(dcls) #dcls map : var.name : var.declaration 
 
-def change_arrays(routine, dcls, lst_horizontal_size, dict_dim_array, region_vars, region_vars):
+def change_arrays(routine, dcls, lst_horizontal_size, map_dim, region_vars, region_vars):
     """
     Changes NPROMA arrays into field api objects.
     :param dcls: dict of NRPOMA arrays declarations to change.
@@ -51,7 +51,7 @@ def change_arrays(routine, dcls, lst_horizontal_size, dict_dim_array, region_var
         d = len(var.dimensions)+1 #FIELD_{d}RB
         dd = d*":,"
         dd = dd[:-1]
-        dict_dim_array[var.name]=dd
+        map_dim[var.name]="YL_"+var_routine.name+dd
         region_vars[var.name]="YL_"+var_routine.name
         str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
         new_var1=irgrip.slurp_any_code(str_node1)
@@ -134,14 +134,6 @@ def InsertPragmaRegionInRoutine(routine):
             print("Unknown pragma found : {pragma}")
 
 
-#def GetPragmaRegionInSources(sources):
-#	# InsertPragmaRegionInSources(sources)
-#    routines = sources.routines
-#    pragma_regions = []
-#    for routine in routines:
-#	    pragma_regions.extend(GetPragmaRegionInRoutine(routine))
-#    return pragma_regions
-
 
 def GetPragmaRegionInRoutine(routine):
     """
@@ -169,6 +161,38 @@ def GetPragmaRegionInRoutine(routine):
         pragma_regions.append({"region": region, "targets": targets, "name": name})
     return pragma_regions
     
+
+def generate_openmp(
+    """
+    :param map_dim: map_dim[old_var]=new_var(:,:,...
+    """
+    str_openmp=()
+    str_openmp=generate_get_data(call_arrays, "HOST", str_get_data)
+    hookcode=generate_lhook(subname, name, "COMPUTE", "COMPUTE", "0")
+    str_openmp=str_openmp+hookcode
+    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)"
+    str_openmp=str_openmp+code 
+    if call_scalar:
+        private="JBLK,"+",".join(call_scalar)
+    else:
+        private="JBLK"
+    firstprivate="YLCPG_BNDS"
+    code="!$OMP PARALLEL DO PRIVATE ({private}) FIRSTPRIVATE({firstprivate})\n"
+    str_openmp=str_openmp+code 
+    code="DO JBLK = 1, YDCPG_OPTS%KGPBLKS\n"
+    str_openmp=str_openmp+code
+    code="CALL YLCPG_BNDS%UPDATE (JBLK)\n"
+    str_openmp=str_openmp+code
+    str_call=fgen(call)
+    for arg in call.arg:
+        if arg 
+        if arg.name in map_dim:
+  
+            str_call.replace(arg.name, map_dim[arg.name])
+    str_openmp=str_openmp+hookcode 
+    str_openmp=str_openmp+
+      
+    hookcode=generate_lhook(subname, name, "COMPUTE", "COMPUTE", "0")
     
 ignore_list = [
         "YDCPG_BNDS%KIDIA",
@@ -227,60 +251,6 @@ def get_args_decl(subname):
     return file.routines[0].arguments
 
 
-#class PointerToField(Transformation):
-#	# Given a routine and a list of variables names, each variable of the
-#    # routine present in the list will be transformed into a pointer of assumed
-#    # shape dimension and a corresponding Field API variable will be created
-#    def __init__(self, names):
-#	    super().__init__()
-#	self._names = names
-#
-#    def transform_subroutine(self, routine, **kwargs):
-#	    i = 0
-#	for stmt in routine.spec.body:
-#		i = i + 1
-#	    symbols = []
-#	    if not isinstance(stmt, VariableDeclaration):
-#		    continue
-#	    decl = stmt
-#	    for var in decl.symbols:
-#		    if var.name in self._names:
-#			    t = SymbolAttributes(
-#					    dtype=DerivedType(
-#						    name="FIELD_" + str(len(var.dimensions) + 1) + "RB"
-#						    ),
-#					    polymorphic=True,
-#					    pointer=True,
-#					    )
-#			    symbols.append(Scalar(name="YL_" + var.name, type=t))
-#	    if symbols:
-#		    routine.spec.insert(i - 1, VariableDeclaration(symbols=symbols))
-#		i = i + 1
-#
-#	variables = FindVariables().visit(routine.spec)
-#	vmap = {}
-#	for v in variables:
-#		if v.name in self._names:
-#			assumed = tuple(RangeIndex((None, None)) for _ in v.shape)
-#		assumed = assumed + (assumed[0],)
-#		vmap[v] = v.clone(
-#				dimensions=assumed,
-#				type=v.type.clone(pointer=True),
-#				)
-#	else:
-#		vmap[v] = v
-#
-#	routine.spec = SubstituteExpressions(vmap).visit(routine.spec)
-
-#
-#def get_local_varnames(routine):
-#	# Get variables which are locally declared (not the one given into arguments)
-#    local_var = set([v.name for v in routine.variables])
-#    upvalues = set([v.name for v in routine.arguments])
-#    local_var = local_var - upvalues
-#    return list(local_var)
-#
-
 def contains_ignore(typename):
 #    contain = ["GEOMETRY", "CPG_BNDS_TYPE", "CPG_OPTS_TYPE", "CPG_MISC_TYPE", "CPG_GPAR_TYPE", "CPG_PHY_TYPE", "MF_PHYS_TYPE", "MF_PHYS_SURF_TYPE", "CPG_SL2_TYPE", "FIELD_VARIABLES", "MODEL", "TYP_DDH"]
     contains_ignore = ["MODEL", "GEOMETRY", "CPG_BNDS_TYPE", "CPG_OPTS_TYPE"]
@@ -294,35 +264,10 @@ def contains_field_api_member(typename):
         "CPG_PHY_TYPE",
         ]
     return (typename.upper() in containg_field_api)
-#
-#
-#class AddPointerToExistingFieldAPI(Transformation):
-#	# Check if the argument is a member of an existing field api object, and if
-#    # so create a correspongind local pointer pointing to it
-#    def __init__(self, callee, args):
-#	    super().__init__()
-#	self.callee = callee
-#	self.args = args
-#	self.args_in_callee = get_args_decl(callee) #Why????
-
-#    def transform_subroutine(self, routine, **kwargs):
-#        variables = FindVariables().visit(routine.spec)
-#    new_vars = []
-#    i = 0
-#def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls, lst_dummy_old, dict_dummy_dim):
- 
 
 
 
-
-
-
-
-
-
-
-
-def compute_call(routine, field_index, 
+def compute_call(routine, call, field_index, call_arrays, call_scalar, lst_derive_type, lst_horizontal_size):
     """
     :param routine:.
     :param field_index: index of field api struct members 
@@ -330,7 +275,7 @@ def compute_call(routine, field_index,
     :param call_scalar
     :param ???
     :param lst_derive_type: lst of derived type that were already added to the routine spec
-    :param dcls: maps the derive type name with its declaration in order to insert new dcl node at theright place
+#######    :param dcls: maps the derive type name with its declaration in order to insert new dcl node at theright place
     """
     for arg in call.arguments:
         #arg can be logical and/or: "YDCPG_OPTS%YRSURF_DIMS%YSD_VVD%NUMFLDS>=8.AND.YDMODEL%YRML_PHY_MF%YRPHY"
@@ -362,10 +307,15 @@ def compute_call(routine, field_index,
                     print("====================================================================")
                     print("Argument = ", arg_name, "not in field api index, neither CPG_OPTS_TYPE!!!")
                     print("====================================================================")
-
-            else: #if call arg is a scalar, shouldn't be an array
+    
+            else: 
+                if isinstance(arg, Array): #should be NPROMA array 
+                    if arg.dimensions[0] in lst_horizontal_dim: 
+                        call_arrays[arg_name]="YL_"+arg_name #call_arrays[Z_A]=YL_ZA
+                if isinstance(arg, Scalar):
+                    call_scalar.append(arg_name)
         else: #if call arg is logical or/and
-       
+            print("Argument = ", arg_name, "ignored, logical statement")
 
 
 
@@ -380,94 +330,6 @@ def compute_call(routine, field_index,
 
 
 
-#        #def AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_var, dcls):
-#    """
-#    :param routine:.
-#    :param call: call statement on which args are changed 
-#    :param map_field: {leftmost.type%A%B%C : type, kind and size of C}
-#    #???!!! FIELD_NEW where???!!!
-#    :param lst_local: lst names of local vars of the caller that were already changed
-#    :param lst_dummy: lst of dummy args of the caller that were already changed
-#    :param map_dummy: dummy_new_name : dummy_new_var
-# ###   :param map_var: 
-#    :param dcls: var : {var.name : var.declaration}, in order to find the node where var is delcared
-#    :param field_new_lst: nodes of FIELD_NEW...
-#    :param lst_dummy_old: lst of var name that were already added to caller spec 
-#    """
-    verbose=True
-    #verbose=False
-    print("call.name=", call.name)
-    """
-    arg
-    v left most derive type of arg or arg
-
-
-    """
-    lst_scalar=[]
-    for arg in call.arguments:
-        if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-
-            arg_name=arg.name
-            arg_name_old=arg.name
-            if (arg_name not in lst_dummy_old): #don't create new var if already exist 
-                arg_basename = arg_name.split("%")[0]
-                for v in routine.variables:
-                    if arg_basename == v.name: #if left most type (or directly var if no derived type) is in routine variables, useless? Direclty catch the routine var through routine_map???
-                           #if left most type is field api 
-                        if '%' in arg_name:
-                            arg_name_='%'.join(arg_name.split("%")[1:])
-                            #*************************************************************
-                            #*************************************************************
-                            #           look in index table
-                            #      field is in field api
-                            if v.type.dtype.name+'%'+arg_name_ in map_field:
-                                #*************************************************************
-                                #*************************************************************
-                                print("arg_name= ", arg_name)  
-                                print("arg_basename= ", arg_basename)  
-                                if arg_basename not in routine.variables:
-                                    continue
-                                    print("arg_basename= ", arg_basename, "not in routine.variables")
-        
-        #*******        ****************************************************
-                                #1) DUMMY ARGS of the caller
-             	        	    #Dummy args YD_A%B => Z_YD_A_B
-                                #build a dict of new fields and add them to the routine spec after analysing all the calls
-                                #if contains_field_api_member(v.type.dtype.name):
-                                if not contains_ignore(v.type.dtype.name): # ===> REMOVE????!!!!!
-        #*******        ****************************************************
-        
-                                    if verbose: print("Dummy arg:", arg_name)
-                                    name = "Z_" + arg_name.replace("%", "_") #Z_YD_...
-                                    region_vars[name]=arg_name
-              #### SHOULD BE USELESS NOW                      if name not in routine.variables and name not in map_dummy: #if var was already added to list of dummy var to changed or already in routine variables
-        #A%B%C i        s type(A)%B%C in map_field dict
-                                    new_var_type = map_field[v.type.dtype.name+'%'+arg_name_][0] # STRUCT%A%B => STRUCT_TYPE%A%B
-                                    #new_var_name= 'Z_'+'_'.join(arg_name.split("%")[:-1])+'_'+map_field[v.type.dtype.name+'%'+arg_name_][1][:-1]+",:)"   #A%B%C => A%B%C(:,:,:)
-                                    d=map_field[v.type.dtype.name+'%'+arg_name_][1][:-1]+",:)"
-                                    dd=re.match("([A-Z0-9]*)(.*)", d)
-                                    dict_dummy_dim[arg_name_old]=dd
-                                    new_var_name= 'Z_'+'_'.join(arg_name.split("%")[:-1])+'_'+d  #A%B%C => A%B%C(:,:,:)
-                                    print("new_var_name= ", new_var_name) 
-                                    print("new_var_type= ", new_var_type) 
-                                    new_var=irgrip.slurp_any_code(f"{new_var_type}, POINTER :: {new_var_name}")
-                                    print("new_var= ", new_var) 
-                                    lst_dummy.append(new_var) #add all of them at the end, to have them next to each other
-                                    map_dummy[new_var_name]=new_var
-                                    lst_dummy_old.append(arg_name_old)
-                                    routine.spec.insert(-2, new_var)
-                                #*************************************************************
-                                #*************************************************************
-                                #           look in index table
-                            #     var isn't in field api 
-                            else:   
-                            #*************************************************************
-                            #*************************************************************
-                                print("=======================================================")
-                                print("Argument = ", arg_name, "not in field api index!!!")
-                                print("=======================================================")
-            elif (isinstance(v, symbols.Scalar)):
-                lst_scalar.append(v)
 def change_dummy_body(routine, lst_dummy_old):
     """
     Replace A%B%C by Z_A_B_C in the routine body according to the list lst_dummy_old
@@ -486,49 +348,53 @@ def change_dummy_body(routine, lst_dummy_old):
     routine.body = SubstituteExpressions(variable_map).visit(routine.body)
 
 
-def generate_get_data():
+def generate_lhook(subname, name, area1, area2, n):
+    hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:{area1}',{n},ZHOOK_HANDLE_{area2})\n"
+    return(hookcode)
+def generate_get_data(call_arrays, machine, str_get_data):
     """
     machine : HOST or  DEVICE
-    region_vars : var of the call of the region.  #lhs => get_data(rhs) : region_vars[lhs]=rhs
+    call_arrays : var of the call of the region.  #lhs => get_data(rhs) : call_arrays[lhs]=rhs
     intent[lhs] : RDWR or RDONLY for lhs
     """
-    lst_get_data=()
-    codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
-    new_node=irgrip.slurp_any_code(codetarget)
-    lst_get_data=lst_get_data+new_code
-    newcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:GET_DATA',0,ZHOOK_HANDLE_FIELD_API)"
-    newnode=irgrip/slurp_any_code(newcode)
-    lst_get_data=lst_get_data+newnode
-    for var in call.args:
-        if var is in
-    for var in region_vars: #lhs => get_data(rhs) : region_vars[lhs]=rhs
+    def lhook(machine, subname, name, n):
+        if machine=="HOST":
+            hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:GET_DATA',{n},ZHOOK_HANDLE_FIELD_API)\n"
+            hookcode=generate_lhook(subname, name, "GET_DATA", "FIELD_API", n)
+        elif machine=="DEVICE":
+            hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:SYNCHOST',{n},ZHOOK_HANDLE_FIELD_API)\n"
+            hookcode=generate_lhook(subname, name, "SYNCHOST", "FIELD_API", n)
+        else:
+            print("'machine' = ", machine " must be 'HOST' or 'DEVICE'")
+    return(hookcode)
+
+    str_get_data=""
+    codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'\n" #"{target}_SECTION" is replaced by code 
+    str_get_data=str_get_data+codetarget
+    hookcode=lhook(machine, subname, name, "0")
+    str_get_data=str_get_data+hookcode
+    #for var in call.args:
+    #    if var is in
+    for var in call_arrays: #lhs => get_data(rhs) : call_arrays[lhs]=rhs
         lhs=var
-        newcode="{lhs} => GET_{machine}_DATA_{intent[lhs]} ({region_vars[lhs]})"
-        newnode=irgrip.slurp_any_code(newcode)
-        lst_get_data=lst_get_data+newnode
-      
-    newcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:GET_DATA',0,ZHOOK_HANDLE_FIELD_API)"
-    newnode=irgrip.slurp_any_code(newcode)
-    lst_get_date=lst_get_data+newnode
+        datacode="{lhs} => GET_{machine}_DATA_{intent[lhs]} ({call_arrays[lhs]})\n"
+        str_get_data=str_get_data+datacode
+    hookcode=lhook(machine, subname, name, "1")
+    str_get_data=str_get_data+hookcode
+    return(str_get_data)
 
-def find_new_arg_names(new_args, call, routine):
-    """
-    Fills in a dict with : the new arg names if the left most var (A%B%C : A = "left most") is field api
-                           the old arg name + need_fa else
-    """
-    variables = FindVariables().visit(routine.spec)
-    for arg in call.arguments:
-        if arg.name in ignore_list:
-            continue
-        arg_basename = arg.name.split("%")[0]
-
-    for v in routine.variables:
-           if arg_basename == v.name: #the left most type must be present in the routine args
-               if contains_field_api_member(v.type.dtype.name):
-                   name = "Z_" + arg.name.replace("%", "_") #Z_YD_...
-                   new_args[arg.name] = {"name": name, "need_fa": False}
-               else:
-                   new_args[arg.name] = {"name": arg.name, "need_fa": True}
+def generate_null(call_arrays, subname, name):
+    str_nullify=""
+    hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:NULLIFY',0,ZHOOK_HANDLE_FIELD_API)\n"
+    hookcode=generate_lhook(subname, name, "NULLIFY", "FIELD_API", "0")
+    str_nullify=str_nullify+hookcode
+    for var in call_arrays: #lhs => get_data(rhs) : call_arrays[lhs]=rhs
+       lhs=var
+       nullcode="{lhs} => NULL ()"
+       str_nullify=str_nullify+nullcode
+    hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:NULLIFY',1,ZHOOK_HANDLE_FIELD_API)\n"
+    hookcode=generate_lhook(subname, name, "NULLIFY", "FIELD_API", "1")
+    str_nullify=str_nullify+hookcode
 
 
 source = Sourcefile.from_file(sys.argv[1])
@@ -566,16 +432,17 @@ lst_dummy=[]
 lst_local=[]
 field_new_lst=() 
 map_dummy={}
-dict_dim_array={}
+map_dim={} #map_dim[old_field]=new_field(:,:,;...)
 dict_dummy_dim={}
 lst_dummy_old=[]
+lst_derive_type=[]
 region_vars={}
 for routine in source.routines:
     logical.transform_subroutine(routine, true_symbols, false_symbols)
     resolve_associates(routine)
 
     dcls=get_dcls(routine, lst_horizontal_size)
-    change_arrays(routine, dcls, lst_horizontal_size, dict_dim_array, region_vars)
+    change_arrays(routine, dcls, lst_horizontal_size, map_dim, region_vars)
     #dcls=[ decl for decl in FindNodes(VariableDeclaration).visit(routine.spec)]
     need_field_api = set()
     new_routine_name = routine.name + "_PARALLEL"
@@ -603,13 +470,6 @@ for routine in source.routines:
         #new_node=irgrip.insert_at_node(PragmaRegions[i], 
         new_args = dict()
 
-        for target in region['targets']:
-            new_section_target=()
-            codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
-            new_node=irgrip.slurp_any_code(codetarget)
-            new_section=new_section+codetarget
-            new_routine.body=irgrip.insert_after_node(old_node, new_node, rootnode=new_routine.body)
-            old_node=new_node
     
     
      
@@ -620,15 +480,20 @@ for routine in source.routines:
        #     print(colored("This target isn't defined!"))
     	##CALL BUILD ARG LST
      	
-        #find_new_arg_names(new_args, call, routine) #change struct%A%B in struct_A_B
-        # if not call.arguments:
-        #     print(f"Subroutine {call.name} has no arguments")
-        #     continue
-       # AddPointerToExistingFieldAPI(call.name, call.arguments)
         for call in calls:
-            AddPointerToExistingFieldAPI(routine, call, map_field, lst_local, lst_dummy, map_dummy, field_new_lst, dcls, lst_dummy_old, dict_dummy_dim, region_vars)
-    
+            call_arrays={}
+            call_scalar=[]
+            compute_call(routine, call, field_index, call_arrays, call_scalar, lst_derive_type, lst_horizontal_size)
 #            args_callee = get_callee_args_of(call.name)
+
+        for target in region['targets']:
+           new_section_target=()
+           codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
+           new_node=irgrip.slurp_any_code(codetarget)
+           new_section=new_section+codetarget
+           new_routine.body=irgrip.insert_after_node(old_node, new_node, rootnode=new_routine.body)
+           old_node=new_node
+
 #
 #            local_vars = get_local_varnames(routine)
 #            for v in call.arguments:
