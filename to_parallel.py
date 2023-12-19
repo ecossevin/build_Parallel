@@ -2,6 +2,7 @@ import sys
 from loki import *
 from pathlib import Path
 import re
+import json
 
 def get_dcls(routine, lst_horizontal_size):
     """
@@ -29,7 +30,7 @@ def get_dcls(routine, lst_horizontal_size):
 #    dcls[s.name]=decls
     return(dcls) #dcls map : var.name : var.declaration 
 
-def change_arrays(routine, dcls, lst_horizontal_size, map_dim, region_vars, region_vars):
+def change_arrays(routine, dcls, lst_horizontal_size, map_dim):
     """
     Changes NPROMA arrays into field api objects.
     :param dcls: dict of NRPOMA arrays declarations to change.
@@ -51,8 +52,9 @@ def change_arrays(routine, dcls, lst_horizontal_size, map_dim, region_vars, regi
         d = len(var.dimensions)+1 #FIELD_{d}RB
         dd = d*":,"
         dd = dd[:-1]
-        map_dim[var.name]="YL_"+var_routine.name+dd
-        region_vars[var.name]="YL_"+var_routine.name
+        #map_dim[var.name]="YL_"+var_routine.name+dd
+        map_dim[var.name]="YL_"+var_routine.name+"("+dd+")"
+        #map_dim[var.name]=var_routine.name+dd
         str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
         new_var1=irgrip.slurp_any_code(str_node1)
         if var_routine.type.kind:
@@ -162,15 +164,18 @@ def GetPragmaRegionInRoutine(routine):
     return pragma_regions
     
 
-def generate_openmp(
+def generate_openmp(routine, calls, map_dim, call_arrays):
     """
     :param map_dim: map_dim[old_var]=new_var(:,:,...
     """
     str_openmp=()
-    str_openmp=generate_get_data(call_arrays, "HOST", str_get_data)
-    hookcode=generate_lhook(subname, name, "COMPUTE", "COMPUTE", "0")
+    str_openmp=f"IF (LPARALLELMETHOD ('OPENMP','{subname}:{name}')) THEN\n"
+    str_data=generate_get_data(call_arrays, "HOST", "GET_DATA")
+    str_openmp=str_openmp+str_data
+    strhook=f"{subname}:{name}:COMPUTE"
+    hookcode=lhook(strhook,"0", "COMPUTE")
     str_openmp=str_openmp+hookcode
-    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)"
+    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
     str_openmp=str_openmp+code 
     if call_scalar:
         private="JBLK,"+",".join(call_scalar)
@@ -183,16 +188,41 @@ def generate_openmp(
     str_openmp=str_openmp+code
     code="CALL YLCPG_BNDS%UPDATE (JBLK)\n"
     str_openmp=str_openmp+code
+    # =================================================
+    #TODO: IF MORE THAN ONE CALL
+#    for call in cals:
+    call=calls[0]
+    # =================================================
     str_call=fgen(call)
-    for arg in call.arg:
-        if arg 
+    print("str_call = ",  str_call)
+    print("map_dim = ", map_dim)
+    file1=open("myfile.txt", "w")
+    file1.write(json.dumps(map_dim))
+    file1.close()
+    for arg in call.arguments:
+        print("arg = ", arg.name)
+        print("type_arg = ", type(arg.name))
+       
         if arg.name in map_dim:
-  
-            str_call.replace(arg.name, map_dim[arg.name])
+            print("************** IN MAP DIM*************************")
+            print("arg = ", arg.name)
+            print("map = ", map_dim[arg.name])
+            str_call=str_call.replace(arg.name+",", map_dim[arg.name]+",")
+    str_call=str_call.replace(":)","JBLK)")
+    print(str_call)
+    str_openmp=str_openmp+str_call
+    hookcode=lhook(strhook,"1", "COMPUTE")
     str_openmp=str_openmp+hookcode 
-    str_openmp=str_openmp+
-      
-    hookcode=generate_lhook(subname, name, "COMPUTE", "COMPUTE", "0")
+    strifsync=f"IF (LSYNCHOST ('{subname}:{name}')) THEN\n"
+    str_openmp=str_openmp+strifsync
+    strsynchost=generate_get_data(call_arrays, "HOST", "SYNCHOST")
+    str_openmp=str_openmp+strsynchost
+    strifsync="ENDIF\n"
+    str_openmp=str_openmp+strifsync
+    str_null=generate_null(call_arrays, subname, name)
+    str_openmp=str_openmp+str_null
+#    str_openmp=str_openmp+"ENDIF\n"   #=> ENDIF must be removed by next compute area of the current region.  
+    return(str_openmp)  
     
 ignore_list = [
         "YDCPG_BNDS%KIDIA",
@@ -267,7 +297,7 @@ def contains_field_api_member(typename):
 
 
 
-def compute_call(routine, call, field_index, call_arrays, call_scalar, lst_derive_type, lst_horizontal_size):
+def compute_call(routine, call, field_index, call_arrays, call_scalar, lst_derive_type, map_dim, lst_horizontal_size):
     """
     :param routine:.
     :param field_index: index of field api struct members 
@@ -278,6 +308,7 @@ def compute_call(routine, call, field_index, call_arrays, call_scalar, lst_deriv
 #######    :param dcls: maps the derive type name with its declaration in order to insert new dcl node at theright place
     """
     for arg in call.arguments:
+        print("arg = ",  arg)
         #arg can be logical and/or: "YDCPG_OPTS%YRSURF_DIMS%YSD_VVD%NUMFLDS>=8.AND.YDMODEL%YRML_PHY_MF%YRPHY"
         if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
             arg_name=arg.name
@@ -285,33 +316,50 @@ def compute_call(routine, call, field_index, call_arrays, call_scalar, lst_deriv
                 arg_basename=arg_name.split("%")[0]
                 var_routine=routine.variable_map[arg_basename]
                 arg_name_=arg_name_='%'.join(arg_name.split("%")[1:])
+#                print("var_routine = ", var_routine)
+#                print("var_routine.type.dtype = ", var_routine.type.dtype)
+#                print("type(var_routine.type.dtype) = ", type(var_routine.type.dtype))
                 if arg_name in lst_derive_type: #1) derive_type already on lst_derive_type
                     new_name="Z_"+arg_name.replace("%","_")
                     call_arrays[new_name]=arg_name
+                    print(" ************ 1 adding var to call_attays   ****************") 
+                    print("arg_name= ",  arg_name)
+                    print("new_name  = ",  new_name)
                     new_arg=arg.clone(name=new_name) #TODO :::::: BOUNDS!!!!!!!!! with blcks!
-                elif arg_name in var_routine.type.dtype.name+"%"+arg_name_ in field_index: #2) derive_type in index 
+                elif (var_routine.type.dtype.name+"%"+arg_name_ in field_index): #2) derive_type in index 
+                #elif arg_name in var_routine.type.dtype.name+"%"+arg_name_ in field_index: #2) derive_type in index 
                     new_name="Z_"+arg_name.replace("%","_")
                     call_arrays[new_name]=arg_name
+                    print(" ************ 2 adding var to call_attays   ****************") 
+                    print("arg_name= ",  arg_name)
+                    print("new_name",  new_name)
+
                     new_arg=arg.clone(name=new_name) #TODO :::::: BOUNDS!!!!!!!!! with blcks!
                     lst_derive_type.append(arg_name)
-                    key=v.type.dtype.name+'%'+arg_name_] 
+                    key=var_routine.type.dtype.name+'%'+arg_name_
                     new_var_type = field_index[key][0] 
-                    d=map_field[key][1][:-1]+",:)"
+                    d=field_index[key][1][:-1]+",:)"
                     dd=re.match("([A-Z0-9]*)(.*)", d)
                     new_var_name= 'Z_'+'_'.join(arg_name.split("%")[:-1])+'_'+d  #A%B%C => A%B%C(:,:,:)
+                    map_dim[arg_name]=new_var_name
                     new_var=irgrip.slurp_any_code(f"{new_var_type}, POINTER :: {new_var_name}")
                     routine.spec.insert(-2, new_var)
-                elif (var_routine.type.dtype.upper() in ["CPG_OPTS_TYPE"]):
+                elif (var_routine.type.dtype in ["CPG_OPTS_TYPE"]):
+                #elif (var_routine.type.dtype.upper() in ["CPG_OPTS_TYPE"]):
                     #TODO
+                    print("Var : ", var_routine, " is of type CPG_OPTS_TYPE.")
                 else: #derive_type not field_api and not CPG_OPTS_TYPE                               
                     print("====================================================================")
                     print("Argument = ", arg_name, "not in field api index, neither CPG_OPTS_TYPE!!!")
                     print("====================================================================")
     
             else: 
-                if isinstance(arg, Array): #should be NPROMA array 
-                    if arg.dimensions[0] in lst_horizontal_dim: 
-                        call_arrays[arg_name]="YL_"+arg_name #call_arrays[Z_A]=YL_ZA
+                if arg.name in dcls:
+                    arg_name=arg.name
+                    call_arrays[arg_name]="YL_"+arg_name #call_arrays[Z_A]=YL_ZA
+                    print(" ************ 3 adding var to call_attays   ****************") 
+                    print("arg_name= ",  arg_name)
+
                 if isinstance(arg, Scalar):
                     call_scalar.append(arg_name)
         else: #if call arg is logical or/and
@@ -330,72 +378,72 @@ def compute_call(routine, call, field_index, call_arrays, call_scalar, lst_deriv
 
 
 
-def change_dummy_body(routine, lst_dummy_old):
-    """
-    Replace A%B%C by Z_A_B_C in the routine body according to the list lst_dummy_old
-    :param routine:.
-    :param lst_dummy_old: list of var to change
-    """
-    verbose=False
-    variable_map={}          
-    for var in FindVariables().visit(routine.body):
-        if var.name in lst_dummy_old: 
-            new_name="Z_"+var.name.replace("%", "_")
-            if verbose: print("var.name= ", var.name)
-            if verbose: print("new_name= ", new_name)
-
-            variable_map[var]=var.clone(name=new_name)
-    routine.body = SubstituteExpressions(variable_map).visit(routine.body)
+#def change_dummy_body(routine, lst_dummy_old):
+#    """
+#    Replace A%B%C by Z_A_B_C in the routine body according to the list lst_dummy_old
+#    :param routine:.
+#    :param lst_dummy_old: list of var to change
+#    """
+#    verbose=False
+#    variable_map={}          
+#    for var in FindVariables().visit(routine.body):
+#        if var.name in lst_dummy_old: 
+#            new_name="Z_"+var.name.replace("%", "_")
+#            if verbose: print("var.name= ", var.name)
+#            if verbose: print("new_name= ", new_name)
+#
+#            variable_map[var]=var.clone(name=new_name)
+#    routine.body = SubstituteExpressions(variable_map).visit(routine.body)
 
 
 def generate_lhook(subname, name, area1, area2, n):
     hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:{area1}',{n},ZHOOK_HANDLE_{area2})\n"
     return(hookcode)
-def generate_get_data(call_arrays, machine, str_get_data):
+
+def lhook(area, n, handle):
+    hookcode=f"IF (LHOOK) CALL DR_HOOK ('{area}',{n},ZHOOK_HANDLE_{handle})\n"
+    return(hookcode)
+def generate_get_data(call_arrays, machine, area):
     """
     machine : HOST or  DEVICE
     call_arrays : var of the call of the region.  #lhs => get_data(rhs) : call_arrays[lhs]=rhs
     intent[lhs] : RDWR or RDONLY for lhs
+    area: GET_DATA or SYNCHOST
     """
-    def lhook(machine, subname, name, n):
-        if machine=="HOST":
-            hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:GET_DATA',{n},ZHOOK_HANDLE_FIELD_API)\n"
-            hookcode=generate_lhook(subname, name, "GET_DATA", "FIELD_API", n)
-        elif machine=="DEVICE":
-            hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:SYNCHOST',{n},ZHOOK_HANDLE_FIELD_API)\n"
-            hookcode=generate_lhook(subname, name, "SYNCHOST", "FIELD_API", n)
-        else:
-            print("'machine' = ", machine " must be 'HOST' or 'DEVICE'")
-    return(hookcode)
 
     str_get_data=""
-    codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'\n" #"{target}_SECTION" is replaced by code 
-    str_get_data=str_get_data+codetarget
-    hookcode=lhook(machine, subname, name, "0")
+    #codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN\n" #"{target}_SECTION" is replaced by code 
+    #str_get_data=str_get_data+codetarget
+    strhook=f"{subname}:{name}:{area}"
+    hookcode=lhook(strhook, "0", "FIELD_API")
     str_get_data=str_get_data+hookcode
-    #for var in call.args:
-    #    if var is in
     for var in call_arrays: #lhs => get_data(rhs) : call_arrays[lhs]=rhs
         lhs=var
-        datacode="{lhs} => GET_{machine}_DATA_{intent[lhs]} ({call_arrays[lhs]})\n"
+        print("call_arrays[lhs]  = ",  call_arrays[lhs])
+        #============================================================
+        #datacode=f"{lhs} => GET_{machine}_DATA_{intent[lhs]} ({call_arrays[lhs]})\n"
+        #          TODO INTENT => get interface and check intent of var
+        #datacode=f"{lhs} => GET_{machine}_DATA_{intent[lhs]} ({call_arrays[lhs]})\n"
+        #============================================================
+        datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({call_arrays[lhs]})\n"
         str_get_data=str_get_data+datacode
-    hookcode=lhook(machine, subname, name, "1")
+    hookcode=lhook(strhook, "1", "FIELD_API")
     str_get_data=str_get_data+hookcode
     return(str_get_data)
 
 def generate_null(call_arrays, subname, name):
     str_nullify=""
-    hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:NULLIFY',0,ZHOOK_HANDLE_FIELD_API)\n"
-    hookcode=generate_lhook(subname, name, "NULLIFY", "FIELD_API", "0")
+    area="NULLIFY"
+    strhook=f"{subname}:{name}:{area}"
+    hookcode=lhook(strhook,"0", "FIELD_API")
     str_nullify=str_nullify+hookcode
     for var in call_arrays: #lhs => get_data(rhs) : call_arrays[lhs]=rhs
        lhs=var
-       nullcode="{lhs} => NULL ()"
+       nullcode=f"{lhs} => NULL ()\n"
        str_nullify=str_nullify+nullcode
-    hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:NULLIFY',1,ZHOOK_HANDLE_FIELD_API)\n"
-    hookcode=generate_lhook(subname, name, "NULLIFY", "FIELD_API", "1")
+    hookcode=lhook(strhook, "1", "FIELD_API")
     str_nullify=str_nullify+hookcode
-
+    return(str_nullify)
 
 source = Sourcefile.from_file(sys.argv[1])
 
@@ -427,26 +475,20 @@ true_symbols, false_symbols = logical_lst.symbols()
 false_symbols.append('LHOOK')
 
 with open('field_index.pkl', 'rb') as fp:
-    map_field= pickle.load(fp)
-lst_dummy=[]
-lst_local=[]
-field_new_lst=() 
-map_dummy={}
+    field_index= pickle.load(fp)
 map_dim={} #map_dim[old_field]=new_field(:,:,;...)
-dict_dummy_dim={}
-lst_dummy_old=[]
-lst_derive_type=[]
-region_vars={}
+lst_derive_type=[] #store derive types that are added to the routine spec
 for routine in source.routines:
+   
+    map_dim={}
     logical.transform_subroutine(routine, true_symbols, false_symbols)
     resolve_associates(routine)
 
     dcls=get_dcls(routine, lst_horizontal_size)
-    change_arrays(routine, dcls, lst_horizontal_size, map_dim, region_vars)
+    change_arrays(routine, dcls, lst_horizontal_size, map_dim)
     #dcls=[ decl for decl in FindNodes(VariableDeclaration).visit(routine.spec)]
     need_field_api = set()
     new_routine_name = routine.name + "_PARALLEL"
-    exit(1)
     regions=GetPragmaRegionInRoutine(routine)
     PragmaRegions=FindNodes(PragmaRegion).visit(routine.body)
     for i in range(len(regions)):
@@ -456,45 +498,43 @@ for routine in source.routines:
         Pragma=PragmaRegions[i]
         print("region", routine.name)
         calls=[call for call in FindNodes(CallStatement).visit(region["region"])]
-
-
         name=region['name']
         subname=routine.name
-        code=code=f"IF (LHOOK) CALL DR_HOOK ('{subname}:{name}',0,ZHOOK_HANDLE_PARALLEL)"
-        new_node=irgrip.slurp_any_code(code)
-        new_routine=routine.clone()
-        new_routine.body=irgrip.insert_at_node(Pragma, new_node, rootnode=routine.body)
-        #new_node=irgrip.insert_at_node(Pragma, node, rootnode=routine.body)
-        old_node=new_node
-        #new_node=old_node
-        #new_node=irgrip.insert_at_node(PragmaRegions[i], 
         new_args = dict()
 
-    
+        call_arrays={}
+        call_scalar=[]
+   
     
      
        # if target=='OPENMP':
+    	##CALL BUILD ARG LST
+     	
+        for call in calls:
+            compute_call(routine, call, field_index, call_arrays, call_scalar, lst_derive_type, map_dim, lst_horizontal_size)
+#            args_callee = get_callee_args_of(call.name)
+        if len(calls) >1:
+            print(" ************************ CAUTION MORE THAN ONE CALL IN A REGION  *****************")
+        code_target=""
+        for target in region['targets']:
+           print("target = ", target)
+           if target=='OpenMP':
+               print("*****OpenMPEN MP ******")
+               str_openmp=generate_openmp(routine, calls, map_dim, call_arrays)
+               node_openmp=irgrip.slurp_any_code(str_openmp)
+               print("call_arrays = ",  call_arrays)
+               print(str_openmp)
+       #        print(fgen(node_openmp))
+       #        file11=open("nodemp.txt", "w")
+       #        file11.write(str_openmp)
+       #        file11.close()
+        #       exit(1)
+
        # else if target=='OPENMPSINGLECOLUMN':
        # else if target=='OPENACCSINGLECOLUMN':
        # else:
        #     print(colored("This target isn't defined!"))
-    	##CALL BUILD ARG LST
-     	
-        for call in calls:
-            call_arrays={}
-            call_scalar=[]
-            compute_call(routine, call, field_index, call_arrays, call_scalar, lst_derive_type, lst_horizontal_size)
-#            args_callee = get_callee_args_of(call.name)
 
-        for target in region['targets']:
-           new_section_target=()
-           codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN PRINT *'{target}_SECTION'" #"{target}_SECTION" is replaced by code 
-           new_node=irgrip.slurp_any_code(codetarget)
-           new_section=new_section+codetarget
-           new_routine.body=irgrip.insert_after_node(old_node, new_node, rootnode=new_routine.body)
-           old_node=new_node
-
-#
 #            local_vars = get_local_varnames(routine)
 #            for v in call.arguments:
 #                if v.name in local_vars:
@@ -527,5 +567,5 @@ for routine in source.routines:
 #    ptf = PointerToField(need_field_api)
 #    ptf.apply(routine)
 
-        change_dummy_body(routine, lst_dummy_old)
+        #change_dummy_body(routine, lst_dummy_old)
 Sourcefile.to_file(source.to_fortran(), Path("src/out.F90"))
