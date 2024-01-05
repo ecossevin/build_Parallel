@@ -1,11 +1,6 @@
 
 import re
 from loki import *
-path="/home/cossevine/build_Parallel/src/toto2.F90"
-file=Sourcefile.from_file(path)
-routine=file["APL_ARPEGE"]
-loops=[loop for loop in FindNodes(ir.Loop).visit(routine.body)]
-loops_jlev=[loop for loop in loops if loop.variable=="JLEV"]
 #loops_jlon=[FindNodes(ir.Loop).visit(loop.body) for loop in loops_jlev]
 #print("loops_jlev= ", loops_jlev)
 #print("loops_jlon= ", loops_jlon)
@@ -57,11 +52,12 @@ def GetPragmaRegionInRoutine(routine):
             targets = ['OpenMP','OpenMPSingleColumn','OpenACCSingleColumn']
     	# region.prepend(Comment(text="Début région"))
     	# region.append(Comment(text="Fin région"))
-    	# print(fgen(region))
         pragma_regions.append({"region": region, "targets": targets, "name": name})
     return pragma_regions
 
-def reverse_loops(routine):
+def reverse_loops(region):
+    loops=[loop for loop in FindNodes(ir.Loop).visit(region)]
+    loops_jlev=[loop for loop in loops if loop.variable=="JLEV"]
 
     loop_map={}
     for loop_jlev in loops_jlev:
@@ -76,12 +72,16 @@ def reverse_loops(routine):
             loop_map[outer_loop]+=(inner_loop.clone(body=(new_inner_loop,)),)
     #    print("loop_map = ", loop_map)
         
-    routine.body = Transformer(loop_map).visit(routine.body)
+    region= Transformer(loop_map).visit(region)
+    #routine.body = Transformer(loop_map).visit(routine.body)
+
+    return(region)
 
 
+def fuse_jlon(region):
 
-def fuse_jlon(routine, region):
-    nodes = FindNodes((CallStatement,Loop)).visit(region)
+    nodes = FindNodes((CallStatement,Loop)).visit(region.body)
+    print("nodes = ", nodes)
     for node in nodes:
         if isinstance(node, Loop):
             inner_loops=FindNodes(Loop).visit(node.body)
@@ -131,6 +131,9 @@ def fuse_jlon(routine, region):
                             idx1=idx2+1
                             break
     
+                    elif isinstance(nodes[idx2], CallStatement): #if next node isn't loop, but is call statement : include CALL in JLON loop : CALL SUB_OPENACC
+                        to_fuse.append(nodes[idx2])
+                        idx1=idx2+1 
     #========================================================================================
     #========================================================================================
                     else: #if next node isn't loop, can't fuse : maybe wrong in some places :TODO => CHECK/ASK THAT 
@@ -138,8 +141,13 @@ def fuse_jlon(routine, region):
     #========================================================================================
                         idx1=idx2+1 #start exploration at the next element
                         break
+
                 jlloops.append(to_fuse) 
             
+            else:
+                idx1+=1 #not a JLON loop 
+        else:
+            idx1+=1 #not a loop
     #            print("to_fuse= ", to_fuse)
     #            for loop in to_fuse:
     #                print("loop_body = ", loop.body)
@@ -149,15 +157,104 @@ def fuse_jlon(routine, region):
         new_loop=Loop(variable=to_fuse[0].variable, body=loop_body, bounds=to_fuse[0].bounds)
         loop_map[to_fuse[0]]=new_loop
         loop_map.update({loop: None for loop in to_fuse[1:]})
-    print(loop_map)
-    routine.body = Transformer(loop_map).visit(routine.body)
+#    print(loop_map)
+    region = Transformer(loop_map).visit(region)
+    return(region)
 
-reverse_loops(routine)
-regions=GetPragmaRegionInRoutine(routine)
-region=regions[0]["region"]
-fuse_jlon(routine, region)
-           
-print(fgen(routine.body))
+
+#def fuse_jlon_old(region):
+#
+#    nodes = FindNodes((CallStatement,Loop)).visit(region.body)
+#    print("nodes = ", nodes)
+#    for node in nodes:
+#        if isinstance(node, Loop):
+#            inner_loops=FindNodes(Loop).visit(node.body)
+#          
+#            for inner_loop in inner_loops:
+#                if inner_loop in nodes:
+#    #                print("inner_loop in nodes")
+#                    nodes.remove(inner_loop)
+#                   # if inner_loop.variable=="JLON":
+#                   #     #loop inversion must be done before
+#                   #     print("======================================================")
+#                   #     print("Caution, an inner loop is horizontal!!!")
+#                   #     print("======================================================")
+#                   # elif inner_loop.variable=="JLEV":
+#                   # else:
+#                   #     print("======================================================")
+#                   #     print("Caution, an inner loop isn't vertical!!!")
+#                   #     print("loop idx= ", inner_loop.variable)
+#                   #     print("======================================================")
+#    
+#    #Dans nodes : on veut fusionner tous les élements consécutifs avec comme idx JLON + bounds identiques
+#    #No hor dependencies in the phys
+#    NN=len(nodes)
+#    idx1=0
+#    jlloops=[]
+#    while idx1<NN: #look if JLON loops with same bounds from nodes[idx1] up to nodes[idx2]
+#        to_fuse=[]
+#        if isinstance(nodes[idx1], Loop):
+#            if nodes[idx1].variable=="JLON":
+#                idx_fuse=idx1
+#                bounds1=nodes[idx1].bounds
+#                for idx2 in range(idx_fuse,NN):
+#                    if isinstance(nodes[idx2], Loop):
+#    
+#                        if nodes[idx2].variable=="JLON":
+#                            bounds2=nodes[idx2].bounds
+#                            if bounds1==bounds2:
+#                                to_fuse.append(nodes[idx2])
+#                                #new_inner_loop=nodes[idx2].body
+#    #                            new_inner_loop=nodes[idx2].clone(body=nodes[idx2].body)
+#    #                            loop_map[nodes[idx_fuse]]+=inner_loop.clone(body=(new_
+#                                idx1=idx2+1
+#                            else: #if next loop has same idx but diff bounds
+#                                idx1=idx2
+#                                break #OR CALL SMTHG TO NORMALIZE IDX...
+#                        else: #if next loop is on a diff idx
+#                            idx1=idx2+1
+#                            break
+#    
+#    #========================================================================================
+#    #========================================================================================
+#                    else: #if next node isn't loop, can't fuse : maybe wrong in some places :TODO => CHECK/ASK THAT 
+#    #========================================================================================
+#    #========================================================================================
+#                        idx1=idx2+1 #start exploration at the next element
+#                        break
+#                jlloops.append(to_fuse) 
+#            
+#            else:
+#                idx1+=1 #not a JLON loop 
+#        else:
+#            idx1+=1 #not a loop
+#    #            print("to_fuse= ", to_fuse)
+#    #            for loop in to_fuse:
+#    #                print("loop_body = ", loop.body)
+#    loop_map={}
+#    for to_fuse in jlloops:
+#        loop_body=flatten([loop.body for loop in to_fuse])
+#        new_loop=Loop(variable=to_fuse[0].variable, body=loop_body, bounds=to_fuse[0].bounds)
+#        loop_map[to_fuse[0]]=new_loop
+#        loop_map.update({loop: None for loop in to_fuse[1:]})
+##    print(loop_map)
+#    region = Transformer(loop_map).visit(region)
+#    return(region)
+
+#path="/home/cossevine/build_Parallel/src/toto2.F90"
+#file=Sourcefile.from_file(path)
+#routine=file["APL_ARPEGE"]
+#loops=[loop for loop in FindNodes(ir.Loop).visit(routine.body)]
+#loops_jlev=[loop for loop in loops if loop.variable=="JLEV"]
+
+#regions=GetPragmaRegionInRoutine(routine)
+#region=regions[0]["region"]
+def loops_fusion(region):
+    region=reverse_loops(region)
+    region=fuse_jlon(region)
+    return(region)
+#region=loop_fusion(region)
+#print(fgen(region))
 #TODO:
 #loops = FindNodes((Loop)).visit(region)
 #
