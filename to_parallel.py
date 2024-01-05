@@ -224,6 +224,20 @@ def generate_call(call, map_dim):
     str_call=str_call.replace(":)","JBLK)")
     return(str_call+"\n")
 
+def generate_non_call_args(args, map_dim, str_body):
+    regex=r'CALL\((?:(?!CALL\().|\n)*?\)'
+    segs=re.split(regex, str_body)
+    non_calls=[seg.strip() for seg in segs if seg.strip() != '']
+    for non_call in non_calls:
+        for arg in args:
+            if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
+                if arg.name in map_dim:
+                    non_call_new=non_call.replace(arg.name, map_dim[arg.name])
+                    #str_body=str_body.replace(arg.name
+                    #>>>TODO : ADD JBLK
+                    str_body.replace(non_call, non_call_new)
+    return(str_body)    
+
 ####def generate_compute_openmp_old(calls):
 ####   str_openmp=""
 ####   code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
@@ -256,11 +270,12 @@ def generate_call(call, map_dim):
 
 def generate_compute_openmp(calls, region):
    str_body=fgen(region.body)
+   str_body=generate_non_call_args(args, map_dim, str_body)
    for call in calls:
        str_call=generate_call(call, map_dim)
        regex=fgen(call)
-       re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
-       str_openmp=str_openmp+str_call
+       str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
+#       str_openmp=str_openmp+str_call
 
    str_openmp=""
    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
@@ -327,11 +342,12 @@ def generate_compute_openmp(calls, region):
 def generate_compute_openmpscc(calls, region):
    new_region=loop_fusion.loops_fusion(region)    
    str_body=fgen(new_region.body)
+   str_body=generate_non_call_args(args, map_dim, str_body)
    #match call by regex, and replace them by new calls
    for call in calls:
        str_call=generate_call(call, map_dim)
        regex=fgen(call)
-       re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
+       str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
 
    str_openmpscc=""
    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
@@ -381,13 +397,14 @@ def generate_compute_openmpscc(calls, region):
 def generate_compute_openaccscc(calls, region):
    new_region=loop_fusion.loops_fusion(region)
    str_body=fgen(new_region.body)
+   str_body=generate_non_call_args(args, map_dim, str_body)
    for call in calls:
        str_call=generate_call(call, map_dim)
        call_name=re.match("CALL\s[a-zA-Z0-9_]*", str_call).group(0)
        str_call=str_call.replace(call_name, call_name+"_OPENACC")
        str_call=str_call[:-2]+", YDSTACK=YLSTACK)\n"
        regex=fgen(call)
-       re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
+       str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
 
    str_openaccscc=""
    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
@@ -938,4 +955,6 @@ for routine in source.routines:
             node_target=irgrip.slurp_any_code(code_region)
             routine.body=irgrip.insert_at_node(Pragma, node_target, rootnode=routine.body)
 
-Sourcefile.to_file(source.to_fortran(), Path("src/out.F90"))
+namearg=sys.argv[1]
+namearg=namearg.replace(".F90", "")
+Sourcefile.to_file(source.to_fortran(), Path(namearg+"_out.F90"))

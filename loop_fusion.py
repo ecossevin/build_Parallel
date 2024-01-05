@@ -153,7 +153,19 @@ def fuse_jlon(region):
     #                print("loop_body = ", loop.body)
     loop_map={}
     for to_fuse in jlloops:
-        loop_body=flatten([loop.body for loop in to_fuse])
+        loop_body=[]
+        for node in to_fuse:
+            if isinstance(node, CallStatement):
+                loop_body.append(node)
+            elif isinstance(node, Loop):
+                loop_body.append(node.body)
+            else:
+                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                print("node to fuse should be call stmt or loops")
+                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        loop_body=flatten(loop_body)
         new_loop=Loop(variable=to_fuse[0].variable, body=loop_body, bounds=to_fuse[0].bounds)
         loop_map[to_fuse[0]]=new_loop
         loop_map.update({loop: None for loop in to_fuse[1:]})
