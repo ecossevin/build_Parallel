@@ -384,17 +384,30 @@ def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, reg
    str_openaccscc=""
    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
    str_openaccscc=str_openaccscc+code 
-   present=""
-   for array in region_arrays:
-       if present=="":
-           present=present+array
-       else:
-           present=present+","+array
-   code=f"""
-        !$ACC PARALLEL LOOP GANG &\n
-        !$ACC&PRESENT({present}) &\n 
-   """
+   code="!$ACC PARALLEL LOOP GANG &\n"
    str_openaccscc=str_openaccscc+code 
+   present="!$ACC&PRESENT("
+   count_present=0 #avoir having to long lines
+   for array in region_arrays:
+       if count_present==0:
+           present=present+array
+           count_present=1
+       else:
+           if count_present%3==0:
+              present=present+", &\n"
+              present=present+"!$ACC&        "
+              present=present+array
+              count_present+=1
+           else:
+               present=present+","+array
+               count_present+=1
+             
+   present=present+") &\n"
+#   code=f"""
+#        !$ACC&PRESENT({present}) &\n 
+#   """
+   str_openaccscc=str_openaccscc+present
+#   str_openaccscc=str_openaccscc+code 
    code="!$ACC&PRIVATE (JBLK) &\n"
    str_openaccscc=str_openaccscc+code 
    code="!$ACC&VECTOR_LENGTH (YDCPG_OPTS%KLON)\n"
@@ -644,7 +657,8 @@ def add_var(routine):
 #*********************************************************
 
 import sys
-path_irgrip="/home/cossevine/kilo/src/kilo"
+#path_irgrip="/home/cossevine/kilo/src/kilo"
+path_irgrip="/home/gmap/mrpm/cossevine/kilo/src/acdc/loki"
 sys.path.append(path_irgrip)
 import irgrip
 
@@ -683,8 +697,9 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     
     if verbose: print('pathr=', pathr)
     if verbose: print('pathw=', pathw)
-
     import logical_lst
+    #exit(1)
+    #
     
 ###    horizontal=Dimension(name='horizontal',size='KLON',index='JLON',bounds=['KIDIA','KFDIA'],aliases=['NPROMA','KDIM%KLON','D%INIT'])
 ###    vertical=Dimension(name='vertical',size='KLEV',index='JLEV')
@@ -725,7 +740,8 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     change_arrays(routine, dcls, lst_horizontal_size, map_dim)
     #dcls=[ decl for decl in FindNodes(VariableDeclaration).visit(routine.spec)]
     need_field_api = set()
-    new_routine_name = routine.name + "_PARALLEL"
+    routine_name = routine.name + "_PARALLEL"
+    #new_routine_name = routine.name + "_PARALLEL"
     regions=GetPragmaRegionInRoutine(routine)
     PragmaRegions=FindNodes(PragmaRegion).visit(routine.body)
     for i in range(len(regions)):
@@ -833,13 +849,12 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
             node_target=irgrip.slurp_any_code(code_region)
             routine.body=irgrip.insert_at_node(Pragma, node_target, rootnode=routine.body)
 
-    print(" ============================================")
-    print(" ============================================")
-    print(" ============================================")
-    print("             FINAL    FGEN       ") 
-    print(" ============================================")
-    print(fgen(routine.spec))
-    Sourcefile.to_file(fgen(routine.spec), Path(pathw+".F90"))
+    #print(" ============================================")
+    #print(" ============================================")
+    #print(" ============================================")
+    #print("             FINAL    FGEN       ") 
+    #print(" ============================================")
+    Sourcefile.to_file(fgen(routine), Path(pathw+".F90"))
     #Sourcefile.to_file(to_fortran(), Path(pathw+".F90"))
     #Sourcefile.to_file(source.to_fortran(), Path(pathw+".F90"))
 #*********************************************************
