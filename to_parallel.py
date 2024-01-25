@@ -4,13 +4,51 @@ from pathlib import Path
 import re
 import json
 
+#def add_lines_old(string, to_add, target):
+#    """ In string: to_add before and after each line where the target appears. 
+#        to_add = [before, after]
+#    
+#    """
+#    new_lines=[]
+#    lines=string.splitlines()
+#    before=to_add[0]
+#    after=to_add[1]
+#    for line in lines:
+#        if target in line:
+#            new_lines.extend(after)
+#        new_lines.append(line)
+#    new_string='\n'.join(new_lines)
+#    return(new_string)    
+
+def add_lines(string, to_add):
+    """ In string: to_add before and after each line where the target appears. 
+        to_add = [before, after]
+    """
+    print("string =", string)
+    before=to_add[0]
+    after=to_add[1]
+    regex="CALL\s[a-zA-Z0-9_]*\([a-zA-Z0-9_%&\s:,\(\)]*\)"
+    match=re.search(regex, string, flags=re.MULTILINE)
+    new_call=before+'\n'+match.group(0)+'\n'+after
+    new_string=re.sub(regex, new_call, string)
+#    new_lines=[]
+#    lines=string.splitlines()
+#    for line in lines:
+#        new_lines.append(line)
+#        if target in line:
+#            new_lines.insert(0, before)
+#            new_lines.append(after)
+#        #new_lines.append(line)
+#    new_string='\n'.join(new_lines)
+    return(new_string)    
+
 def get_dcls(routine, lst_horizontal_size):
     """
     
     """
 
-#    verbose=False
-    verbose=True
+    verbose=False
+#    verbose=True
 
     dcls={}
     variable_map=routine.variable_map
@@ -207,21 +245,34 @@ def generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmetho
     str_null=generate_null(region_arrays, subname, name)
     str_compute=str_compute+str_null
     str_compute=str_compute+"ENDIF\n"   #=> ENDIF must be removed by next compute area of the current region.  
+    print("==============================")
+    print("==============================")
+    print("       STR ACC    ")
+    print("str_compute=", str_compute)
+    print("==============================")
+    print("==============================")
     return(str_compute)  
 
 def generate_call(call, map_dim):
     str_call=fgen(call)
     for arg in call.arguments:
+        print("arg=", arg)
         if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-            print("arg = ", arg.name)
-            print("type_arg = ", type(arg.name))
-          
+            #print("arg = ", arg.name)
+            #print("type_arg = ", type(arg.name))
+            if arg.name=="YDMF_PHYS_SURF%GSD_VV%PD2":
+               print("YES1")
+         
             if arg.name in map_dim:
+                if arg.name=="YDMF_PHYS_SURF%GSD_VV%PD2":
+                    print("map_dim[arg.name]=", map_dim[arg.name])
+                    print("YES2")
                #print("************** IN MAP DIM*************************")
                #print("arg = ", arg.name)
                #print("map = ", map_dim[arg.name])
                 str_call=str_call.replace(arg.name+",", map_dim[arg.name]+",")
     str_call=str_call.replace(":)","JBLK)")
+    print("str_call_func=", str_call)
     return(str_call+"\n")
 
 def generate_non_call_args(args, map_dim, str_body):
@@ -250,8 +301,8 @@ def generate_non_call_args(args, map_dim, str_body):
             for arg in args:
                 if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
                     if arg.name in map_dim:
-                        print("non_call =", non_call)
-                        print("arg_name = ", arg.name)
+                        #print("non_call =", non_call)
+                        #print("arg_name = ", arg.name)
                         match=re.match("[\w%]+", map_dim[arg.name])
                         if match: #arg in map_dim 
                             new_name=match.group(0)
@@ -259,33 +310,33 @@ def generate_non_call_args(args, map_dim, str_body):
                             match_arg=re.search(regex, non_call, flags=re.MULTILINE) #match arg, if arg in non_call 
                             if match_arg:
                                 old_arg=match_arg.group(0)
-                                print("old_arg =", old_arg)
+                                #print("old_arg =", old_arg)
                                 regex="([\w%]+)(\([,:\w%\s]+\))"
                                 new_arg=old_arg[:-1]+", JBLK)"
-                                print("old_arg =", old_arg)
-                                print("new_arg =", new_arg)
+                                #print("old_arg =", old_arg)
+                                #print("new_arg =", new_arg)
 
                                 non_call=non_call.replace(old_arg, new_arg)
-                                print("non_call=", non_call)
+                                #print("non_call=", non_call)
                                 
                                 #str_body=str_body.replace(arg.name
                                 #>>>TODO : ADD JBLK
         str_body=str_body.replace(non_call_old, non_call)
-        print("str_body = ", str_body)
+  #      print("str_body = ", str_body)
     else:
         print("no non-calls")
     return(str_body)    
 
 def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays):
    str_body=fgen(region.body)
-   print("args = ", args)
-   print("map_dim = ", map_dim)
-   print("calls =", calls)
-   print("str_body = ", str_body)
+  # print("args = ", args)
+  # print("map_dim = ", map_dim)
+  # print("calls =", calls)
+  # print("str_body = ", str_body)
    str_body=generate_non_call_args(args, map_dim, str_body)
    for call in calls:
        str_call=generate_call(call, map_dim)
-       regex=fgen(call)
+       regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
        str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
 #       str_openmp=str_openmp+str_call
 
@@ -313,15 +364,57 @@ def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_
 
    return(str_openmp)
 
-  
+def change_jl_loop(str_body, acc=None):
+   if acc:
+        code=acc
+   else:
+        code=""
+   
+   
+   str_jlon="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
+   str_jlon=code+str_jlon
+   code="YLCPG_BNDS%KIDIA = JLON\n"
+   str_jlon=str_jlon+code
+   code="YLCPG_BNDS%KFDIA = JLON\n"
+   str_jlon=str_jlon+code
+   code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+   str_jlon=str_jlon+code
+   code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+   str_jlon=str_jlon+code
+   regex="DO JLON.*"
+   str_body=re.sub(regex,str_jlon, str_body) #insert in str_body, at line DO JLON =, str_jlon
+   print("str_body=", str_body)
+   return(str_body)
+ 
 def generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays):
-   new_region=loop_fusion.loops_fusion(region)    
-   str_body=fgen(new_region.body)
+   str_region=fgen(region.body)
+   str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
+#   print("str_region1 = ", str_body)
+   str_region=add_lines(str_region, str_jlon)
+#   print("str_region2 = ", str_body)
+   region=irgrip.slurp_any_code(str_region) #tuple where first element is an empty comment
+   if len(region)==0:
+       region=region[0]
+   else:
+       region=region[1]
+
+#   region=loop_fusion.loops_fusion(region)    
+   str_body=fgen(region.body)
    str_body=generate_non_call_args(args, map_dim, str_body)
    #match call by regex, and replace them by new calls
    for call in calls:
+ 
        str_call=generate_call(call, map_dim)
-       regex=fgen(call)
+       regex="CALL\s"+fgen(call.name)
+       call_name=re.match(regex, str_call).group(0)
+       #call_name=re.match("CALL\s[a-zA-Z0-9_]*", str_call).group(0)
+       str_call=str_call.replace(call_name, call_name+"_OPENACC")
+       str_call=str_call[:-2]+", YDSTACK=YLSTACK)\n"
+
+       #regex=fgen(call)
+       #str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
+       regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
+       #str_body=str_body.replace(fgen(call), str_call)
        str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
 
    str_openmpscc=""
@@ -338,49 +431,62 @@ def generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, regi
    str_openmpscc=str_openmpscc+code
    #print("str_openmpscc = ", str_openmpscc)
    #creating the new JLON loop: 
-   code="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
-   str_jlon=""
-   str_jlon=str_jlon+code 
-   code="YLCPG_BNDS%KIDIA = JLON\n"
-   str_jlon=str_jlon+code
-   code="YLCPG_BNDS%KFDIA = JLON\n"
-   str_jlon=str_jlon+code
-   code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-   str_jlon=str_jlon+code
-   code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-   str_jlon=str_jlon+code
-
-   regex="DO JLON.*"
 
    #insert region in generated code:  
    #print("str_body1 = ", str_body)
    #print("str_jlon=  ", str_jlon)
-   str_body=re.sub(regex,str_jlon, str_body) #insert in str_body, at line DO JLON =, str_jlon
+   #str_body=re.sub(regex,str_jlon, str_body) #insert in str_body, at line DO JLON =, str_jlon
+   str_body=change_jl_loop(str_body)
    #add region body
    #print("str_body2 = ", str_body)
-   str_openmpscc=str_openmpscc+str_body
+   str_openmpscc=str_openmpscc+str_body+"\n"
 
    #str_openmpscc=str_openmpscc+str_call
-   #code="ENDDO\n"
-   #str_openmpscc=str_openmpscc+code
    code="ENDDO\n"
    str_openmpscc=str_openmpscc+code
+#   code="ENDDO\n"
+#   str_openmpscc=str_openmpscc+code
    
   
    return(str_openmpscc)
 
 def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays):
-   new_region=loop_fusion.loops_fusion(region)
-   str_body=fgen(new_region.body)
+   str_region=fgen(region.body)
+   str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
+   print("str_region1 = ", str_region)
+   str_region=add_lines(str_region, str_jlon)
+   print("str_region2 = ", str_region)
+   region=irgrip.slurp_any_code(str_region) #tuple where first element is an empty comment
+   print("len_region =", len(region))
+   if len(region)==0:
+       region=region[0]
+   else:
+       region=region[1]
+   #new_region=loop_fusion.loops_fusion(region)
+   #region=loop_fusion.loops_fusion(region)
+   str_body=fgen(region)
+   print("str_region3 = ", str_body)
+#   exit(1)
    str_body=generate_non_call_args(args, map_dim, str_body)
+   print("str_region4 = ", str_body)
    for call in calls:
        str_call=generate_call(call, map_dim)
-       call_name=re.match("CALL\s[a-zA-Z0-9_]*", str_call).group(0)
+       regex="CALL\s"+fgen(call.name)
+       call_name=re.match(regex, str_call).group(0)
+       #call_name=re.match("CALL\s[a-zA-Z0-9_]*", str_call).group(0)
        str_call=str_call.replace(call_name, call_name+"_OPENACC")
        str_call=str_call[:-2]+", YDSTACK=YLSTACK)\n"
-       regex=fgen(call)
+#       regex=fgen(call)
+       print("fgen(call))= ", fgen(call))
+       print("str_call=", str_call)
+       regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
+       #regex="CALL\s"+fgen(call.name)+"_OPENACC"+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
+      # match=re.search(regex, string, flags=re.MULTILINE)
+       print("regex =", regex)
+#       str_body=str_body.replace(fgen(call), str_call)
        str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
 
+   print("str_region5 = ", str_body)
    str_openaccscc=""
    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
    str_openaccscc=str_openaccscc+code 
@@ -421,27 +527,18 @@ def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, reg
    else:
        private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
    code=f"""
-        !&ACC PARALLEL LOOP VECTOR &\n
+        !&ACC LOOP VECTOR &\n
         !$ACC&PRIVATE ({private})\n"""
-   str_openaccscc=str_openaccscc+code 
-   code="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
-   str_jlon=""
-   str_jlon=str_jlon+code 
-   code="YLCPG_BNDS%KIDIA = JLON\n"
-   str_jlon=str_jlon+code
-   code="YLCPG_BNDS%KFDIA = JLON\n"
-   str_jlon=str_jlon+code
-   code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-   str_jlon=str_jlon+code
-   code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-   str_jlon=str_jlon+code
-   regex="DO JLON.*"
-   str_body=re.sub(regex,str_jlon, str_body) #insert in str_body, at line DO JLON =, str_jlon
-   str_openaccscc=str_openaccscc+str_body
-   #code="ENDDO\n"
-   #str_openaccscc=str_openaccscc+code
+   #str_openaccscc=str_openaccscc+code 
+   print("str_body6= ", str_body)
+   str_body=change_jl_loop(str_body, code)
+   print("str_body7= ", str_body)
+   str_openaccscc=str_openaccscc+str_body+"\n"
+   print("str_body8= ", str_openaccscc)
    code="ENDDO\n"
    str_openaccscc=str_openaccscc+code
+#   code="ENDDO\n"
+#   str_openaccscc=str_openaccscc+code
    
   
    return(str_openaccscc)
@@ -685,8 +782,8 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     #----------------------------------------------
     #setup
     #----------------------------------------------
-    verbose=True
-    #verbose=False
+#    verbose=True
+    verbose=False
     print("pathpack =", pathpack)
     print("pathview =", pathview)
     print("pathfile =", pathfile)
@@ -741,6 +838,16 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     #dcls=[ decl for decl in FindNodes(VariableDeclaration).visit(routine.spec)]
     need_field_api = set()
     routine_name = routine.name + "_PARALLEL"
+    str_modules="""
+        USE ACPY_MOD
+        USE STACK_MOD
+        USE YOMPARALLELMETHOD
+        USE FIELD_ACCESS_MODULE
+        USE FIELD_FACTORY_MODULE
+        USE FIELD_MODULE
+    """
+    code_modules=irgrip.slurp_any_code(str_modules)
+    routine.spec.insert(1, code_modules)
     #new_routine_name = routine.name + "_PARALLEL"
     regions=GetPragmaRegionInRoutine(routine)
     PragmaRegions=FindNodes(PragmaRegion).visit(routine.body)
@@ -776,7 +883,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
             if len(calls) >1:
                 print(" ************************ CAUTION MORE THAN ONE CALL IN A REGION  *****************")
             code_region=""
-            print("targets = ", targets)
+            if verbose: print("targets = ", targets)
             for target in targets: 
             #for target in region['targets']:
    #            print("target = ", target)
@@ -843,7 +950,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
 #             print("******************************************************") 
 #             print("     FGEN          ROUTINE                ")
 #             print("******************************************************") 
-#             print("******************************************************") 
+#             print("****************************
 #             print(fgen(code_region))
 
             node_target=irgrip.slurp_any_code(code_region)

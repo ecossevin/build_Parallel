@@ -81,7 +81,7 @@ def reverse_loops(region):
 def fuse_jlon(region):
 
     nodes = FindNodes((CallStatement,Loop)).visit(region.body)
-    print("nodes = ", nodes)
+#    print("nodes = ", nodes)
     for node in nodes:
         if isinstance(node, Loop):
             inner_loops=FindNodes(Loop).visit(node.body)
