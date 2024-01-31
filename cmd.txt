@@ -1,0 +1,1 @@
+python3 to_parallel.py --pathpack $p --pathview src --pathfile /toto3.F90 > out.txt

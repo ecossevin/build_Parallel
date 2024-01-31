@@ -24,13 +24,18 @@ def add_lines(string, to_add):
     """ In string: to_add before and after each line where the target appears. 
         to_add = [before, after]
     """
-    print("string =", string)
+#    print("string =", string)
     before=to_add[0]
     after=to_add[1]
     regex="CALL\s[a-zA-Z0-9_]*\([a-zA-Z0-9_%&\s:,\(\)]*\)"
     match=re.search(regex, string, flags=re.MULTILINE)
-    new_call=before+'\n'+match.group(0)+'\n'+after
-    new_string=re.sub(regex, new_call, string)
+    if match:
+        
+        new_call=before+'\n'+match.group(0)+'\n'+after
+        new_string=re.sub(regex, new_call, string)
+        return(new_string)    
+    else:
+        return(string)
 #    new_lines=[]
 #    lines=string.splitlines()
 #    for line in lines:
@@ -40,7 +45,6 @@ def add_lines(string, to_add):
 #            new_lines.append(after)
 #        #new_lines.append(line)
 #    new_string='\n'.join(new_lines)
-    return(new_string)    
 
 def get_dcls(routine, lst_horizontal_size):
     """
@@ -75,7 +79,7 @@ def change_arrays(routine, dcls, lst_horizontal_size, map_dim):
     """
 #*******        ****************************************************
                         #2) LOCAL ARGS of the caller
-                        #local var Z => PT, Z
+                        #local var Z => PT Z,YL_Z
                         #build an array with the name of the arrays that were changed, replace the arrays gradually
 #*******        ************************************************
     verbose=False
@@ -95,7 +99,8 @@ def change_arrays(routine, dcls, lst_horizontal_size, map_dim):
         dd = d*":,"
         dd = dd[:-1]
         #map_dim[var.name]="YL_"+var_routine.name+dd
-        map_dim[var.name]="YL_"+var_routine.name+"("+dd+")"
+        map_dim[0][var.name]="YL_"+var_routine.name+"("+dd+")"
+        map_dim[1][var.name]=var_routine.name+"("+dd+")"
         #map_dim[var.name]=var_routine.name+dd
         str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
         new_var1=irgrip.slurp_any_code(str_node1)
@@ -210,7 +215,7 @@ def GetPragmaRegionInRoutine(routine):
         pragma_regions.append({"region": region, "targets": targets, "name": name})
     return pragma_regions
 
-def generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar):
+def generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type):  
     """
     :param map_dim: map_dim[old_var]=new_var(:,:,...
     :param parallelmethod: OPENMP, OPENMPSINGLECOLUMN, OPENACC
@@ -226,11 +231,11 @@ def generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmetho
     hookcode=lhook(strhook,"0", "COMPUTE")
     str_compute=str_compute+hookcode
     if parallelmethod=="OPENMP":
-        str_compute=str_compute+generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays)
+        str_compute=str_compute+generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type)
     elif parallelmethod=="OPENMPSINGLECOLUMN":
-        str_compute=str_compute+generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays)
+        str_compute=str_compute+generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type)
     elif parallelmethod=="OPENACCSINGLECOLUMN":
-        str_compute=str_compute+generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays)
+        str_compute=str_compute+generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type)
 #
 
 
@@ -256,26 +261,37 @@ def generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmetho
 def generate_call(call, map_dim):
     str_call=fgen(call)
     for arg in call.arguments:
-        print("arg=", arg)
         if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-            #print("arg = ", arg.name)
-            #print("type_arg = ", type(arg.name))
-            if arg.name=="YDMF_PHYS_SURF%GSD_VV%PD2":
-               print("YES1")
-         
-            if arg.name in map_dim:
-                if arg.name=="YDMF_PHYS_SURF%GSD_VV%PD2":
-                    print("map_dim[arg.name]=", map_dim[arg.name])
-                    print("YES2")
-               #print("************** IN MAP DIM*************************")
-               #print("arg = ", arg.name)
-               #print("map = ", map_dim[arg.name])
-                str_call=str_call.replace(arg.name+",", map_dim[arg.name]+",")
-    str_call=str_call.replace(":)","JBLK)")
-    print("str_call_func=", str_call)
+            if arg.name in map_dim[1]:
+#                breakpoint()
+                new_arg=map_dim[1][arg.name]
+                new_arg_name=re.match("[a-zA-Z0-9_%]+", new_arg)
+#                arg_name=fgen(arg)
+                regex="(\\b"+arg.name+"\\b)(\s*\([^)]*\))*"
+                #regex=f"(\b{arg.name}\b)(\s*\([^)]*\))*"
+                match=re.search(regex, str_call, flags=re.MULTILINE)
+                #match=re.match(regex, str_call)
+                if not match:
+                    print("NO MATCH")
+               #     print("arg = ", fgen(arg))
+               #     print("arg_name =", arg.name)
+               #     print("regex =", regex)
+               #     print("str_call =", str_call)
+                if match.group(2): #if array already has some shapes
+                    new_arg_dim=match.group(2)[:-1]+",JBLK)"
+#                    new_arg=match.group(2).replace(":)","JBLK)")
+                    new_arg=new_arg_name.group(0)+new_arg_dim
+#                    new_arg=new_arg.replace(match.group(1), new_arg_name.group(0))
+                    print("new_arg=", new_arg)
+                    str_call=re.sub(regex, new_arg, str_call)
+                    #str_call=str_call.replace(match.group(0), new_arg)
+                else:
+                    new_arg=map_dim[1][arg.name].replace(":)","JBLK)")
+                    str_call=re.sub(regex, new_arg, str_call)
+                    #str_call=str_call.replace(match.group(0), new_arg) 
     return(str_call+"\n")
 
-def generate_non_call_args(args, map_dim, str_body):
+def generate_non_call_args(args, lst_derive_type, str_body):
     regex=r'CALL[a-zA-Z0-9\s%_]*\((?:(?!CALL\().|\n)*?\)'
 #    chaine_initiale= """
 #
@@ -300,10 +316,10 @@ def generate_non_call_args(args, map_dim, str_body):
             non_call_old=non_call
             for arg in args:
                 if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-                    if arg.name in map_dim:
+                    if arg.name in lst_derive_type:
                         #print("non_call =", non_call)
                         #print("arg_name = ", arg.name)
-                        match=re.match("[\w%]+", map_dim[arg.name])
+                        match=re.match("[\w%]+", map_dim[1][arg.name])
                         if match: #arg in map_dim 
                             new_name=match.group(0)
                             regex=arg.name+"\([,:\w%\s]+\)" #match arg(JL, A%SSS, :)... 
@@ -327,7 +343,7 @@ def generate_non_call_args(args, map_dim, str_body):
         print("no non-calls")
     return(str_body)    
 
-def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays):
+def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type):
    str_body=fgen(region.body)
   # print("args = ", args)
   # print("map_dim = ", map_dim)
@@ -383,24 +399,29 @@ def change_jl_loop(str_body, acc=None):
    str_jlon=str_jlon+code
    regex="DO JLON.*"
    str_body=re.sub(regex,str_jlon, str_body) #insert in str_body, at line DO JLON =, str_jlon
-   print("str_body=", str_body)
    return(str_body)
  
-def generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays):
+def generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type):
    str_region=fgen(region.body)
    str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
 #   print("str_region1 = ", str_body)
    str_region=add_lines(str_region, str_jlon)
-#   print("str_region2 = ", str_body)
-   region=irgrip.slurp_any_code(str_region) #tuple where first element is an empty comment
-   if len(region)==0:
-       region=region[0]
-   else:
-       region=region[1]
+#   calls=FindNodes(CallStatement).visit(region)
+   for call in calls:
+       str_call=fgen(call)
+       str_call=str_jlon[0]+"\n"+str_call+"\n"+str_jlon[1]
+        
+       new_call=irgrip.slurp_any_code(str_call)
+       region=irgrip.insert_at_node(call, new_call, rootnode=region)
+       #breakpoint()
+##   if len(region)==1:
+##       region=region[0]
+##   else:
+##       region[1]
 
 #   region=loop_fusion.loops_fusion(region)    
    str_body=fgen(region.body)
-   str_body=generate_non_call_args(args, map_dim, str_body)
+   str_body=generate_non_call_args(args, lst_derive_type, str_body)
    #match call by regex, and replace them by new calls
    for call in calls:
  
@@ -429,46 +450,39 @@ def generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, regi
    str_openmpscc=str_openmpscc+code 
    code="DO JBLK = 1, YDCPG_OPTS%KGPBLKS\n"
    str_openmpscc=str_openmpscc+code
-   #print("str_openmpscc = ", str_openmpscc)
-   #creating the new JLON loop: 
-
-   #insert region in generated code:  
-   #print("str_body1 = ", str_body)
-   #print("str_jlon=  ", str_jlon)
-   #str_body=re.sub(regex,str_jlon, str_body) #insert in str_body, at line DO JLON =, str_jlon
    str_body=change_jl_loop(str_body)
-   #add region body
-   #print("str_body2 = ", str_body)
    str_openmpscc=str_openmpscc+str_body+"\n"
 
-   #str_openmpscc=str_openmpscc+str_call
    code="ENDDO\n"
    str_openmpscc=str_openmpscc+code
-#   code="ENDDO\n"
-#   str_openmpscc=str_openmpscc+code
    
   
    return(str_openmpscc)
 
-def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays):
+def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type):
    str_region=fgen(region.body)
    str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
-   print("str_region1 = ", str_region)
+   #print("str_region1 = ", str_region)
    str_region=add_lines(str_region, str_jlon)
-   print("str_region2 = ", str_region)
-   region=irgrip.slurp_any_code(str_region) #tuple where first element is an empty comment
-   print("len_region =", len(region))
-   if len(region)==0:
-       region=region[0]
-   else:
-       region=region[1]
+   #print("str_region2 = ", str_region)
+   print("STR_REGION = ", str_region) 
+   #region=irgrip.slurp_any_code(str_region) #tuple where first element is an empty comment
+#   print("len_region =", len(region))
+#   calls=FindNodes(CallStatement).visit(region)
+   for call in calls:
+       str_call=fgen(call)
+       str_call=str_jlon[0]+"\n"+str_call+"\n"+str_jlon[1]
+        
+       new_call=irgrip.slurp_any_code(str_call)
+       region=irgrip.insert_at_node(call, new_call, rootnode=region)
+
    #new_region=loop_fusion.loops_fusion(region)
    #region=loop_fusion.loops_fusion(region)
-   str_body=fgen(region)
-   print("str_region3 = ", str_body)
+   str_body=fgen(region.body)
+   #print("str_region3 = ", str_body)
 #   exit(1)
-   str_body=generate_non_call_args(args, map_dim, str_body)
-   print("str_region4 = ", str_body)
+   str_body=generate_non_call_args(args, lst_derive_type, str_body)
+   #print("str_region4 = ", str_body)
    for call in calls:
        str_call=generate_call(call, map_dim)
        regex="CALL\s"+fgen(call.name)
@@ -477,16 +491,16 @@ def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, reg
        str_call=str_call.replace(call_name, call_name+"_OPENACC")
        str_call=str_call[:-2]+", YDSTACK=YLSTACK)\n"
 #       regex=fgen(call)
-       print("fgen(call))= ", fgen(call))
-       print("str_call=", str_call)
+#       print("fgen(call))= ", fgen(call))
+#       print("str_call=", str_call)
        regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
        #regex="CALL\s"+fgen(call.name)+"_OPENACC"+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
       # match=re.search(regex, string, flags=re.MULTILINE)
-       print("regex =", regex)
+#       print("regex =", regex)
 #       str_body=str_body.replace(fgen(call), str_call)
        str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
 
-   print("str_region5 = ", str_body)
+#   print("str_region5 = ", str_body)
    str_openaccscc=""
    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
    str_openaccscc=str_openaccscc+code 
@@ -530,16 +544,15 @@ def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, reg
         !&ACC LOOP VECTOR &\n
         !$ACC&PRIVATE ({private})\n"""
    #str_openaccscc=str_openaccscc+code 
-   print("str_body6= ", str_body)
+ #  print("str_body6= ", str_body)
    str_body=change_jl_loop(str_body, code)
-   print("str_body7= ", str_body)
+  # print("str_body7= ", str_body)
    str_openaccscc=str_openaccscc+str_body+"\n"
-   print("str_body8= ", str_openaccscc)
+   #print("str_body8= ", str_openaccscc)
    code="ENDDO\n"
    str_openaccscc=str_openaccscc+code
 #   code="ENDDO\n"
 #   str_openaccscc=str_openaccscc+code
-   
   
    return(str_openaccscc)
 
@@ -634,7 +647,8 @@ def compute_region(routine, args, field_index, region_arrays, region_scalar, lst
                     d=field_index[key][1][:-1]+",:)"
                     dd=re.match("([A-Z0-9]*)(.*)", d)
                     new_var_name= 'Z_'+'_'.join(arg_name.split("%")[:-1])+'_'+d  #A%B%C => A%B%C(:,:,:)
-                    map_dim[arg_name]=new_var_name
+                    map_dim[0][arg_name]=new_var_name
+                    map_dim[1][arg_name]=new_var_name
                     new_var=irgrip.slurp_any_code(f"{new_var_type}, POINTER :: {new_var_name}")
                     routine.spec.insert(-1, new_var)
                 elif (var_routine.type.dtype in ["CPG_OPTS_TYPE"]):
@@ -824,11 +838,10 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     
     with open(pathpack+'/'+'field_index.pkl', 'rb') as fp:
         field_index= pickle.load(fp)
-    map_dim={} #map_dim[old_field]=new_field(:,:,;...)
+    map_dim=[{},{}] #map_dim[old_field]=new_field(:,:,;...)
     lst_derive_type=[] #store derive types that are added to the routine spec
 #    for routine in source.routines:
     routine=source.subroutines[0]    
-    map_dim={}
     logical.transform_subroutine(routine, true_symbols, false_symbols)
     resolve_associates(routine)
 
@@ -896,7 +909,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
                if target=='OpenMP' and able_mp:
    #                print("*****OpenMPEN MP ******")
                    parallelmethod="OPENMP"
-                   str_openmp=generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar)
+                   str_openmp=generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type)
                    node_openmp=irgrip.slurp_any_code(str_openmp)
                    #print("region_arrays = ",  region_arrays)
                    if verbose:
@@ -915,7 +928,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
                elif target=="OpenMPSingleColumn" and able_scc:
                    #print("*****OpenMPEN MPSCC ******")
                    parallelmethod="OPENMPSINGLECOLUMN"
-                   str_openmpscc=generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar)
+                   str_openmpscc=generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type)
                    node_openmpscc=irgrip.slurp_any_code(str_openmpscc)
                    if verbose:
                        print(str_openmpscc)
@@ -929,7 +942,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
                elif target=="OpenACCSingleColumn" and able_acc:
                    #print("*****OpenAccSCC ******")
                    parallelmethod="OPENACCSINGLECOLUMN"
-                   str_openaccscc=generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar)
+                   str_openaccscc=generate_parallelmethod(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type)
                    node_openaccscc=irgrip.slurp_any_code(str_openaccscc)
                    #print(str_openaccscc)
                    #print("=================================================================")
@@ -953,6 +966,8 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
 #             print("****************************
 #             print(fgen(code_region))
 
+            #breakpoint()
+            print("code_region =", code_region)
             node_target=irgrip.slurp_any_code(code_region)
             routine.body=irgrip.insert_at_node(Pragma, node_target, rootnode=routine.body)
 
