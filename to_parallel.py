@@ -71,19 +71,21 @@ def get_dcls(routine, lst_horizontal_size):
 def change_arrays(routine, dcls, lst_horizontal_size, map_dim):
 #change NPROMA arrays : works only if NPROMA arrays are local var of the routine.
     """
-    Changes NPROMA arrays into field api objects : change dcls and add new dcls, field creation and field deletion
+    Changes NPROMA arrays into field api objects : change dcls and add new dcls, field creation and field deletion. Runs once on the whole subroutine at the begining.
     :param dcls: dict of NRPOMA arrays declarations to change.
     :param lst_horizontal_size: lst of possible horizontal size names.
     :param map_dim: map_dim[0] : old_var : new_var+dim 
 		    map_dim[1] : old_var : new_var+dim if derive_type; old_va+dim elif array
     """
-#*******        ****************************************************
+#******************************************************************
+#******************************************************************
                         #LOCAL VARS of the caller, stored in dcls
                         #local var Z => PT Z,YL_Z
                         #build an array with the name of the arrays that were changed, replace the arrays gradually
                         #field_new_lst : creation of the field api objects
 			#dfield_new_lst : deletion of the field api objects
-#*******        ************************************************
+#******************************************************************
+#******************************************************************
     verbose=False
     #verbose=True
     new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)")
@@ -280,6 +282,17 @@ def generate_variables(args, str_body, map_dim):
 
     def find_arg(string, arg_name, regex):
 #        match=re.search(regex, string, flags=re.MULTILINE)
+        """
+        regex="(\\b"+fgen(arg.name)+"\\b)(\s*\([^)]*\))*"
+	Return a iterable of all the matches : 
+
+	And for each match, example : 
+	
+	find_arg(name(:,1, JLON)) => group(0) = name(:,1, JLON), group(1) = name, group(2) = (:,1, JLON)
+	find_arg(nametoto) => None; because nametoto isn't name
+	find_arg(name) => group(0) = name, group(1) = name, group(2) = None
+       
+	"""
         match=re.finditer(regex, string, flags=re.MULTILINE)
         return(match)
 
@@ -308,79 +321,6 @@ def generate_variables(args, str_body, map_dim):
                             str_body = str_body[:begin]+new_arg+str_body[end:]
     return(str_body+"\n")
 
-
-
-#def generate_call(call, map_dim):
-#    """
-#    Changes call : add JBLK, change var name 
-#    :param map_dim: map_dim[0] : old_var : new_var+dim 
-#		    map_dim[1] : old_var : new_var+dim if derive_type; old_var+dim elif array
-#
-#    """
-#    def find_arg(string, arg_name):
-#        regex="(\\b"+arg.name+"\\b)(\s*\([^)]*\))*"
-#        match=re.search(regex, string, flags=re.MULTILINE)
-#        return(match)
-#       
-#    str_call=fgen(call)
-#    for arg in call.arguments:
-#        if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-#            if arg.name in map_dim[1]:
-#                new_arg=map_dim[1][arg.name]
-#                new_arg_name=re.match("[a-zA-Z0-9_%]+", new_arg)
-#                match=find_arg(str_call, arg.name)
-#                if not match:
-#                    bprint("NO MATCH")
-#                if match.group(2): #if array already has some shapes: keep them and JBLK at the end.
-#                    new_arg_dim=match.group(2)[:-1]+",JBLK)"
-#                    new_arg=new_arg_name.group(0)+new_arg_dim
-#                    print("new_arg=", new_arg)
-#                    str_call=re.sub(regex, new_arg, str_call)
-#                else: #if array has no shape : add them and add JBLK
-#                    new_arg=map_dim[1][arg.name].replace(":)","JBLK)")
-#                    str_call=re.sub(regex, new_arg, str_call)
-#    return(str_call+"\n")
-#
-#def generate_non_call_args(args, lst_derive_type, str_body, map_dim):
-#    """ 
-#    Changes arrays that aren't in a call statement : 
-#    """
-##==========================================================    
-##get non calls
-##==========================================================    
-#    regex=r'CALL[a-zA-Z0-9\s%_]*\((?:(?!CALL\().|\n)*?\)'
-#    segs=re.split(regex, str_body)
-#    non_calls=[seg.strip() for seg in segs if seg.strip() != '']
-#    if non_calls:
-#        for non_call in non_calls:
-#            generate_call(non_calls, map_dim)
-##            non_call_old=non_call
-##            for arg in args:
-##                if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-##                    if arg.name in lst_derive_type: #if 
-##                        match=re.match("[\w%]+", map_dim[1][arg.name])
-##                        if match: #arg in map_dim 
-##                            new_name=match.group(0)
-##                            regex=arg.name+"\([,:\w%\s]+\)" #match arg(JL, A%SSS, :)... 
-##                            match_arg=re.search(regex, non_call, flags=re.MULTILINE) #match arg, if arg in non_call 
-##                            if match_arg:
-##                                old_arg=match_arg.group(0)
-##                                #print("old_arg =", old_arg)
-##                                regex="([\w%]+)(\([,:\w%\s]+\))"
-##                                new_arg=old_arg[:-1]+", JBLK)"
-##                                #print("old_arg =", old_arg)
-##                                #print("new_arg =", new_arg)
-##
-##                                non_call=non_call.replace(old_arg, new_arg)
-##                                #print("non_call=", non_call)
-##                                
-##                                #str_body=str_body.replace(arg.name
-##                                #>>>TODO : ADD JBLK
-#        str_body=str_body.replace(non_call_old, non_call)
-##  #      print("str_body = ", str_body)
-##    else:
-##        print("no non-calls")
-#    return(str_body)    
 
 def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type):
    """
@@ -437,25 +377,30 @@ def generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arr
    """
 
    def change_jl_loop(str_region, acc=None):
-      if acc:
+       """
+       Change JLON loops in loops with stack statements.
+       :param str_region: string of the region.
+       :param acc: only for acc code: add ACC declarations before the JLON statement.
+       """
+       if acc:
            code=acc
-      else:
+       else:
            code=""
       
       
-      str_jlon="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
-      str_jlon=code+str_jlon
-      code="YLCPG_BNDS%KIDIA = JLON\n"
-      str_jlon=str_jlon+code
-      code="YLCPG_BNDS%KFDIA = JLON\n"
-      str_jlon=str_jlon+code
-      code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-      str_jlon=str_jlon+code
-      code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-      str_jlon=str_jlon+code
-      regex="DO JLON.*"
-      str_region=re.sub(regex,str_jlon, str_region) #insert in str_region, at line DO JLON =, str_jlon
-      return(str_region)
+       str_jlon="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
+       str_jlon=code+str_jlon
+       code="YLCPG_BNDS%KIDIA = JLON\n"
+       str_jlon=str_jlon+code
+       code="YLCPG_BNDS%KFDIA = JLON\n"
+       str_jlon=str_jlon+code
+       code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+       str_jlon=str_jlon+code
+       code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+       str_jlon=str_jlon+code
+       regex="DO JLON.*"
+       str_region=re.sub(regex,str_jlon, str_region) #insert in str_region, at line DO JLON =, str_jlon
+       return(str_region)
  
    def generate_pragma_openmpscc(region_scalar):
    
@@ -512,9 +457,10 @@ def generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arr
            private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
        else:
            private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
-       code=f"""
-            !&ACC LOOP VECTOR &\n
-            !$ACC&PRIVATE ({private})\n"""
+#       code=f"""
+#            !$ACC LOOP VECTOR &\n
+#            !$ACC&PRIVATE ({private})\n"""
+       code=f"!$ACC LOOP VECTOR PRIVATE ({private}) \n"
        return(str_openaccscc, code)
 
    str_region=fgen(region.body)
@@ -551,9 +497,6 @@ def generate_call(calls, str_body):
         regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
         str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
 
-
-
-
     
 ignore_list = [
         "YDCPG_BNDS%KIDIA",
@@ -589,6 +532,11 @@ def contains_field_api_member(typename):
 
 def compute_region(routine, args, field_index, region_arrays, region_scalar, lst_derive_type, map_dim, lst_horizontal_size, dcls):
     """
+    Changes a parallel area : 
+    1) v
+
+
+
     :param routine:.
     :param field_index: index of field api struct members 
     :param region_arrays: mapping of names. region_arrays[Z_...]=YL_Z...; region_arrays[Z_A_B_C...]=A%B%C
@@ -597,6 +545,11 @@ def compute_region(routine, args, field_index, region_arrays, region_scalar, lst
     :param lst_derive_type: lst of derived type that were already added to the routine spec
 #######    :param dcls: maps the derive type name with its declaration in order to insert new dcl node at theright place
     """
+##==========================================================    
+##Init to empty:
+#    region_arrays={}
+#    region_scalar=[]
+##==========================================================    
     verbose=False
     #verbose=True
 #    for arg in call.arguments:
@@ -605,38 +558,36 @@ def compute_region(routine, args, field_index, region_arrays, region_scalar, lst
         #arg can be logical and/or: "YDCPG_OPTS%YRSURF_DIMS%YSD_VVD%NUMFLDS>=8.AND.YDMODEL%YRML_PHY_MF%YRPHY"
         if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
             arg_name=arg.name
-            if '%' in arg_name: # 1) derive_type already on lst_derive_type, 2) derive_type in index, 3) derive_type CPG_OPTS_TYPE 
+
+#==========================================================    
+#==========================================================    
+#I) arg is a derive type:
+#==========================================================    
+#==========================================================    
+            if '%' in arg_name: 
                 arg_basename=arg_name.split("%")[0]
                 var_routine=routine.variable_map[arg_basename]
                 if var_routine.type.dtype.name=="MF_PHYS_SURF_TYPE": #remove P
-#                    p_arg=arg_name.split("%")[-1:][0][1:]
                     arg_name__="%".join(arg_name.split("%")[:-1])+"%F_"+arg_name.split("%")[-1:][0][1:] #remove extra P
                 else:
                     arg_name__="%".join(arg_name.split("%")[:-1])+"%F_"+arg_name.split("%")[-1:][0] #A%B%C => A%B%F_C
-                #arg_name__=arg_name
                 arg_name_=arg_name_='%'.join(arg_name.split("%")[1:])
-#                print("var_routine = ", var_routine)
-#                print("var_routine.type.dtype = ", var_routine.type.dtype)
-#                print("type(var_routine.type.dtype) = ", type(var_routine.type.dtype))
-                if arg_name__ in lst_derive_type: #1) derive_type already on lst_derive_type
+#==========================================================    
+#I-1) derive_type already on lst_derive_type
+#==========================================================    
+                if arg_name__ in lst_derive_type: 
                     new_name="Z_"+arg_name.replace("%","_")
                     region_arrays[new_name]=arg_name__ #????
-                    if verbose:
-                        print(" ************ 1 adding var to region_arrays   ****************") 
-                        print("arg_name= ",  arg_name)
-                        print("new_name  = ",  new_name)
-                        print(" *************************************************************") 
-                    new_arg=arg.clone(name=new_name) #TODO :::::: BOUNDS!!!!!!!!! with blcks!
-                elif (var_routine.type.dtype.name+"%"+arg_name_ in field_index): #2) derive_type in index 
+                    new_arg=arg.clone(name=new_name)  #useless?
+#==========================================================    
+#I-2) derive_type not in lst_derive_type but in index
+#The array associated to the derive type must be created and added to the routine spec
+#==========================================================    
+                elif (var_routine.type.dtype.name+"%"+arg_name_ in field_index):  
                 #elif arg_name in var_routine.type.dtype.name+"%"+arg_name_ in field_index: #2) derive_type in index 
                     new_name="Z_"+arg_name.replace("%","_")
                     region_arrays[new_name]=arg_name__
-                    if verbose:
-                        print(" ************ 2 adding var to region_arrays   ****************") 
-                        print("new_name",  new_name)
-                        print(" *************************************************************") 
-
-                    new_arg=arg.clone(name=new_name) #TODO :::::: BOUNDS!!!!!!!!! with blcks!
+                    new_arg=arg.clone(name=new_name) #useless?
                     lst_derive_type.append(arg_name__)
                     key=var_routine.type.dtype.name+'%'+arg_name_
                     new_var_type = field_index[key][0] 
@@ -647,32 +598,46 @@ def compute_region(routine, args, field_index, region_arrays, region_scalar, lst
                     map_dim[1][arg_name]=new_var_name
                     new_var=irgrip.slurp_any_code(f"{new_var_type}, POINTER :: {new_var_name}")
                     routine.spec.insert(-1, new_var)
+#==========================================================    
+#I-3) derive_type not in index
+#==========================================================    
                 elif (var_routine.type.dtype in ["CPG_OPTS_TYPE"]):
                 #elif (var_routine.type.dtype.upper() in ["CPG_OPTS_TYPE"]):
                     #TODO
-                    if verbose: print("Var : ", var_routine, " is of type CPG_OPTS_TYPE.")
+                    if verbose: 
+                        to_print="Var : "+ var_routine+ " is of type CPG_OPTS_TYPE."
+                        bprint(to_print)
                 else: #derive_type not field_api and not CPG_OPTS_TYPE                               
                     if verbose: 
-                        print("====================================================================")
-                        print("Argument = ", arg_name, "not in field api index, neither CPG_OPTS_TYPE!!!")
-                        print("====================================================================")
-    
+                        to_print="Argument = "+ arg_name+ "not in field api index+ neither CPG_OPTS_TYPE!!!"
+                        bprint(to_print)
+#==========================================================    
+#==========================================================    
+#II) arg isn't a derive type
+#==========================================================    
+#==========================================================    
+   
             else: 
+
+#==========================================================    
+#II-1) arg is an array 
+#==========================================================    
                 if arg.name in dcls:
                     arg_name=arg.name
                     region_arrays[arg_name]="YL_"+arg_name #region_arrays[Z_A]=YL_ZA
                     if verbose:
-                        print(" ************ 3 adding var to call_arrays   ****************") 
-                        print("arg_name= ",  arg_name)
-                        print(" *************************************************************") 
-
+                        to_print=f"adding {arg_name} to region_arrays"
+                        bprint(to_print)
+#==========================================================    
+#II-2) arg is a scalar 
+#==========================================================    
                 if isinstance(arg, Scalar):
                     region_scalar.append(arg_name)
         else: #if call arg is logical or/and
-            print("Argument = ", arg_name, "ignored, logical statement")
+            if verbose: print("Argument = ", arg_name, "ignored, logical statement")
 
 
-def generate_lhook(subname, name, area1, area2, n):
+def generate_lhook(subname, name, area0, area2, n):
     hookcode="IF (LHOOK) CALL DR_HOOK ('{subname}:{name}:{area1}',{n},ZHOOK_HANDLE_{area2})\n"
     return(hookcode)
 
@@ -681,31 +646,33 @@ def lhook(area, n, handle):
     return(hookcode)
 def generate_get_data(region_arrays, machine, area, subname, name):
     """
-    machine : HOST or  DEVICE
-    region_arrays : var of the call of the region.  #lhs => get_data(rhs) : region_arrays[lhs]=rhs
-    intent[lhs] : RDWR or RDONLY for lhs
-    area: GET_DATA or SYNCHOST
+    param: machine : HOST or  DEVICE
+    param: region_arrays: var of the call of the region.  #lhs => get_data(rhs) : region_arrays[lhs]=rhs
+    param: intent[lhs]:  RDWR or RDONLY for lhs
+    param: area: GET_DATA or SYNCHOST
     """
     verbose=False
+    intent=False
     str_get_data=""
-    #codetarget=f"IF (LPARALLELMETHOD ('{target}','{subname}:{name}')) THEN\n" #"{target}_SECTION" is replaced by code 
-    #str_get_data=str_get_data+codetarget
     strhook=f"{subname}:{name}:{area}"
     hookcode=lhook(strhook, "0", "FIELD_API")
     str_get_data=str_get_data+hookcode
     for var in region_arrays: #lhs => get_data(rhs) : region_arrays[lhs]=rhs
         lhs=var
         if verbose: print("region_arrays[lhs]  = ",  region_arrays[lhs])
-        #============================================================
-        #datacode=f"{lhs} => GET_{machine}_DATA_{intent[lhs]} ({region_arrays[lhs]})\n"
-        #          TODO INTENT => get interface and check intent of var
-        #datacode=f"{lhs} => GET_{machine}_DATA_{intent[lhs]} ({region_arrays[lhs]})\n"
-        #============================================================
-        #field=region_arrays[lhs]
-        #field_="%".join(field.split("%")[:-1])+"%F_"+field.split("%")[-1:] # A%B%C => A%B%F_C
-        #datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({field_})\n"
-        datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({region_arrays[lhs]})\n"
-        str_get_data=str_get_data+datacode
+    #    if intent:
+    #    #============================================================
+    #    #TODO : get intent
+    #    #datacode=f"{lhs} => GET_{machine}_DATA_{intent[lhs]} ({region_arrays[lhs]})\n"
+    #    #          TODO INTENT => get interface and check intent of var
+    #    #datacode=f"{lhs} => GET_{machine}_DATA_{intent[lhs]} ({region_arrays[lhs]})\n"
+    #    #============================================================
+    #    #field=region_arrays[lhs]
+    #    #field_="%".join(field.split("%")[:-1])+"%F_"+field.split("%")[-1:] # A%B%C => A%B%F_C
+    #    #datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({field_})\n"
+        if not intent:
+            datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({region_arrays[lhs]})\n"
+            str_get_data=str_get_data+datacode
     hookcode=lhook(strhook, "1", "FIELD_API")
     str_get_data=str_get_data+hookcode
     return(str_get_data)
@@ -725,6 +692,9 @@ def generate_null(region_arrays, subname, name):
     return(str_nullify)
 #
 def add_var(routine):
+    """
+    Add str_var to the routine where ZHOOK_HANDLE is declared
+    """
     stop=False
     for decl in FindNodes(VariableDeclaration).visit(routine.spec):
         for s in decl.symbols:
@@ -736,35 +706,23 @@ def add_var(routine):
                     TYPE(STACK) :: YLSTACK"""
                 node=irgrip.slurp_any_code(str_var)
                 routine.spec=irgrip.insert_after_node(decl, node, rootnode=routine.spec)
-                #print("#########################################################")
-                #print("#########################################################")
-                #print("#########################################################")
-                #print("##                    ROUTINE    SPEC                  ##")
-                #print(fgen(routine.spec))
-                #print("#########################################################")
-                #print("#########################################################")
-                #print("#########################################################")
                 stop=True
             break
         if stop:
             break
 
-#*********************************************************
-#             Creating lst of dim for derive types
-#*********************************************************
-
-
-#print(map_field)
-#f=open("map_field.txt", "x")
-#f.write(map_field)
-
-#with open('map_field.txt', 'w') as 
-
-#*********************************************************
-#*********************************************************
+##*********************************************************
+##             Creating lst of dim for derive types
+##*********************************************************
+##print(map_field)
+##f=open("map_field.txt", "x")
+##f.write(map_field)
+#
+##with open('map_field.txt', 'w') as 
+##*********************************************************
+##*********************************************************
 
 import sys
-#path_irgrip="/home/cossevine/kilo/src/kilo"
 path_irgrip="/home/gmap/mrpm/cossevine/kilo/src/acdc/loki"
 sys.path.append(path_irgrip)
 import irgrip
@@ -805,8 +763,6 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     if verbose: print('pathr=', pathr)
     if verbose: print('pathw=', pathw)
     import logical_lst
-    #exit(1)
-    #
     
 ###    horizontal=Dimension(name='horizontal',size='KLON',index='JLON',bounds=['KIDIA','KFDIA'],aliases=['NPROMA','KDIM%KLON','D%INIT'])
 ###    vertical=Dimension(name='vertical',size='KLEV',index='JLEV')
@@ -825,28 +781,53 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
 ###    false_symbols.append('LHOOK')
  
     source=Sourcefile.from_file(pathr) 
-    #----------------------------------------------
-    #transformation:
-    #----------------------------------------------
+
+
+
+
+    able_mp=True
+    able_scc=True
+    #able_scc=False
+    #able_acc=False
+    able_acc=True
+    dict_able={}
+    dict_parallelmethod={}
+    dict_parallelmethod["OpenMP"]="OPENMP"
+    dict_parallelmethod["OpenMPSingleColumn"]="OPENMPSINGLECOLUMN"
+    dict_parallelmethod["OpenACCSingleColumn"]="OPENACCSINGLECOLUMN"
+    dict_able["OpenMP"]=able_mp
+    dict_able["OpenMPSingleColumn"]=able_scc
+    dict_able["OpenACCSingleColumn"]=able_acc
+
     lst_horizontal_size=["KLON","YDCPG_OPTS%KLON","YDGEOMETRY%YRDIM%NPROMA","KPROMA", "YDDIM%NPROMA", "NPROMA"]
     true_symbols, false_symbols = logical_lst.symbols()
     #false_symbols.append('LHOOK')
     
+#==========================================================    
+#Loading the index file
+#==========================================================    
     with open(pathpack+'/'+'field_index.pkl', 'rb') as fp:
         field_index= pickle.load(fp)
+
     map_dim=[{},{}] #map_dim[old_field]=new_field(:,:,;...)
     lst_derive_type=[] #store derive types that are added to the routine spec
 #    for routine in source.routines:
     routine=source.subroutines[0]    
+
+    #----------------------------------------------
+    #transformation:
+    #----------------------------------------------
+
     logical.transform_subroutine(routine, true_symbols, false_symbols)
     resolve_associates(routine)
 
-    add_var(routine)
-    dcls=get_dcls(routine, lst_horizontal_size)
-    change_arrays(routine, dcls, lst_horizontal_size, map_dim)
-    #dcls=[ decl for decl in FindNodes(VariableDeclaration).visit(routine.spec)]
-    need_field_api = set()
+    add_var(routine) #zhook variables
+    dcls=get_dcls(routine, lst_horizontal_size) #one dcl per line + return lst of array dcl
+    change_arrays(routine, dcls, lst_horizontal_size, map_dim) #creation of field api objetcs associated with each array
     routine_name = routine.name + "_PARALLEL"
+#==========================================================    
+#Adding modules
+#==========================================================    
     str_modules="""
         USE ACPY_MOD
         USE STACK_MOD
@@ -857,124 +838,47 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     """
     code_modules=irgrip.slurp_any_code(str_modules)
     routine.spec.insert(1, code_modules)
-    #new_routine_name = routine.name + "_PARALLEL"
     regions=GetPragmaRegionInRoutine(routine)
     PragmaRegions=FindNodes(PragmaRegion).visit(routine.body)
+
+    subname=routine.name
+
     for i in range(len(regions)):
-   #     print(regions[i])
-   #     print(i)
         region=regions[i]
         Pragma=PragmaRegions[i]
-   #      print("region", routine.name)
         calls=[call for call in FindNodes(CallStatement).visit(region["region"])]
 
-        #loops_klev=[loop for loop in FindNodes(ir.Loop).visit(region["region"]) if loop.variable=="JLEV"]
-        
-        #loops_jlon=[loop for loop in FindNodes(ir.Loop).visit(region["region"]) if loop.variable=="JLON"]
         
         name=region['name']
-        subname=routine.name
         new_args = dict()
         targets=region["targets"]
         region=region["region"]
+#==========================================================    
+#Init to empty:
         region_arrays={}
         region_scalar=[]
-  
-   
-    
+        code_region=""
+#==========================================================    
+
         args=FindVariables(unique=True).visit(region)
         
-        do_call=True
-        if do_call:
-             #for call in calls:
-            compute_region(routine, args, field_index, region_arrays, region_scalar, lst_derive_type, map_dim, lst_horizontal_size, dcls)
-   #             args_callee = get_callee_args_of(call.name)
-            if len(calls) >1:
-                print(" ************************ CAUTION MORE THAN ONE CALL IN A REGION  *****************")
-            code_region=""
-            if verbose: print("targets = ", targets)
-            for target in targets: 
-            #for target in region['targets']:
-   #            print("target = ", target)
-               able_mp=True
-               able_scc=True
-               #able_scc=False
-               #able_acc=False
-               able_acc=True
-               
-               if target=='OpenMP' and able_mp:
-   #                print("*****OpenMPEN MP ******")
-                   parallelmethod="OPENMP"
-                   str_openmp=generate_parallelregion(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type)
-                   node_openmp=irgrip.slurp_any_code(str_openmp)
-                   #print("region_arrays = ",  region_arrays)
-                   if verbose:
-                       print(str_openmp)
-                       print("=================================================================")
-                       print("======================== fgen ======================")   
-                       print("=================================================================")
-                       print(fgen(node_openmp))
-           #        print(fgen(node_openmp))
-           #        file11=open("nodemp.txt", "w")
-           #        file11.write(str_openmp)
-           #        file11.close()
-            #       exit(1)
-                   code_region=code_region+str_openmp
-                   #code_target=code_target+f"\n"+str_openmp
-               elif target=="OpenMPSingleColumn" and able_scc:
-                   #print("*****OpenMPEN MPSCC ******")
-                   parallelmethod="OPENMPSINGLECOLUMN"
-                   str_openmpscc=generate_parallelregion(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type)
-                   node_openmpscc=irgrip.slurp_any_code(str_openmpscc)
-                   if verbose:
-                       print(str_openmpscc)
-                       print("=================================================================")
-                       print("======================== fgen open mp scc  ======================")
-                       print("=================================================================")
-                       print(fgen(node_openmpscc))
-                   code_region=code_region+str_openmpscc
-                   #code_target=code_target+f"\n"+str_openmpscc
-   
-               elif target=="OpenACCSingleColumn" and able_acc:
-                   #print("*****OpenAccSCC ******")
-                   parallelmethod="OPENACCSINGLECOLUMN"
-                   str_openaccscc=generate_parallelregion(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type)
-                   node_openaccscc=irgrip.slurp_any_code(str_openaccscc)
-                   #print(str_openaccscc)
-                   #print("=================================================================")
-                   #print("======================== fgen open acc scc  =====================")
-                   #print("=================================================================")
-                   #print(fgen(node_openaccscc))
-                   code_region=code_region+str_openaccscc
-                   #code_target=code_target+f"\n"+str_openaccscc
-#             print("******************************************************") 
-#             print("******************************************************") 
-#             print("******************************************************") 
-#             print("               ROUTINE                ")
-#             print("******************************************************") 
-#             print("******************************************************") 
-#             print(code_region)
-#             print("******************************************************") 
-#             print("******************************************************") 
-#             print("******************************************************") 
-#             print("     FGEN          ROUTINE                ")
-#             print("******************************************************") 
-#             print("****************************
-#             print(fgen(code_region))
+        compute_region(routine, args, field_index, region_arrays, region_scalar, lst_derive_type, map_dim, lst_horizontal_size, dcls)
+        if verbose: print("targets = ", targets)
+        for target in targets: 
+           able=dict_able[target]
+           parallelmethod=dict_parallelmethod[target]
 
-            #breakpoint()
-            print("code_region =", code_region)
-            node_target=irgrip.slurp_any_code(code_region)
-            routine.body=irgrip.insert_at_node(Pragma, node_target, rootnode=routine.body)
+           if able:
+               str_code=generate_parallelregion(region, calls, map_dim, region_arrays, parallelmethod, subname, name, args, region_scalar, lst_derive_type)
+               node_openmp=irgrip.slurp_any_code(str_code)
+                #file11=open("nodemp.txt", "w")
+                #file11.write(str_openmp)
+                #file11.close()
+               code_region=code_region+str_code
+        node_target=irgrip.slurp_any_code(code_region)
+        routine.body=irgrip.insert_at_node(Pragma, node_target, rootnode=routine.body)
 
-    #print(" ============================================")
-    #print(" ============================================")
-    #print(" ============================================")
-    #print("             FINAL    FGEN       ") 
-    #print(" ============================================")
     Sourcefile.to_file(fgen(routine), Path(pathw+".F90"))
-    #Sourcefile.to_file(to_fortran(), Path(pathw+".F90"))
-    #Sourcefile.to_file(source.to_fortran(), Path(pathw+".F90"))
 #*********************************************************
 #*********************************************************
 #*********************************************************
