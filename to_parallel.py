@@ -240,10 +240,12 @@ def generate_parallelregion(region, calls, map_dim, region_arrays, parallelmetho
     str_compute=str_compute+hookcode
     if parallelmethod=="OPENMP":
         str_compute=str_compute+generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type)
-    elif parallelmethod=="OPENMPSINGLECOLUMN":
-        str_compute=str_compute+generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type)
-    elif parallelmethod=="OPENACCSINGLECOLUMN":
-        str_compute=str_compute+generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type)
+    elif parallelmethod=="OPENMPSINGLECOLUMN" or "OPENACCSINGLECOLUMN":
+        str_compute=str_compute+generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type, parallelmethod)
+	    
+	    #str_compute=str_compute+generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type, parallelmethod):
+   # elif parallelmethod=="OPENACCSINGLECOLUMN":
+   #     str_compute=str_compute+generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type)
 #
 
 
@@ -308,97 +310,96 @@ def generate_variables(args, str_body, map_dim):
 
 
 
-def generate_call(call, map_dim):
-    """
-    Changes call : add JBLK, change var name 
-    :param map_dim: map_dim[0] : old_var : new_var+dim 
-		    map_dim[1] : old_var : new_var+dim if derive_type; old_var+dim elif array
-
-    """
-    def find_arg(string, arg_name):
-        regex="(\\b"+arg.name+"\\b)(\s*\([^)]*\))*"
-        match=re.search(regex, string, flags=re.MULTILINE)
-        return(match)
-       
-    str_call=fgen(call)
-    for arg in call.arguments:
-        if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-            if arg.name in map_dim[1]:
-                new_arg=map_dim[1][arg.name]
-                new_arg_name=re.match("[a-zA-Z0-9_%]+", new_arg)
-                match=find_arg(str_call, arg.name)
-                if not match:
-                    bprint("NO MATCH")
-                if match.group(2): #if array already has some shapes: keep them and JBLK at the end.
-                    new_arg_dim=match.group(2)[:-1]+",JBLK)"
-                    new_arg=new_arg_name.group(0)+new_arg_dim
-                    print("new_arg=", new_arg)
-                    str_call=re.sub(regex, new_arg, str_call)
-                else: #if array has no shape : add them and add JBLK
-                    new_arg=map_dim[1][arg.name].replace(":)","JBLK)")
-                    str_call=re.sub(regex, new_arg, str_call)
-    return(str_call+"\n")
-
-def generate_non_call_args(args, lst_derive_type, str_body, map_dim):
-    """ 
-    Changes arrays that aren't in a call statement : 
-    """
-#==========================================================    
-#get non calls
-#==========================================================    
-    regex=r'CALL[a-zA-Z0-9\s%_]*\((?:(?!CALL\().|\n)*?\)'
-    segs=re.split(regex, str_body)
-    non_calls=[seg.strip() for seg in segs if seg.strip() != '']
-    if non_calls:
-        for non_call in non_calls:
-            generate_call(non_calls, map_dim)
-#            non_call_old=non_call
-#            for arg in args:
-#                if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
-#                    if arg.name in lst_derive_type: #if 
-#                        match=re.match("[\w%]+", map_dim[1][arg.name])
-#                        if match: #arg in map_dim 
-#                            new_name=match.group(0)
-#                            regex=arg.name+"\([,:\w%\s]+\)" #match arg(JL, A%SSS, :)... 
-#                            match_arg=re.search(regex, non_call, flags=re.MULTILINE) #match arg, if arg in non_call 
-#                            if match_arg:
-#                                old_arg=match_arg.group(0)
-#                                #print("old_arg =", old_arg)
-#                                regex="([\w%]+)(\([,:\w%\s]+\))"
-#                                new_arg=old_arg[:-1]+", JBLK)"
-#                                #print("old_arg =", old_arg)
-#                                #print("new_arg =", new_arg)
+#def generate_call(call, map_dim):
+#    """
+#    Changes call : add JBLK, change var name 
+#    :param map_dim: map_dim[0] : old_var : new_var+dim 
+#		    map_dim[1] : old_var : new_var+dim if derive_type; old_var+dim elif array
 #
-#                                non_call=non_call.replace(old_arg, new_arg)
-#                                #print("non_call=", non_call)
-#                                
-#                                #str_body=str_body.replace(arg.name
-#                                #>>>TODO : ADD JBLK
-        str_body=str_body.replace(non_call_old, non_call)
-#  #      print("str_body = ", str_body)
-#    else:
-#        print("no non-calls")
+#    """
+#    def find_arg(string, arg_name):
+#        regex="(\\b"+arg.name+"\\b)(\s*\([^)]*\))*"
+#        match=re.search(regex, string, flags=re.MULTILINE)
+#        return(match)
+#       
+#    str_call=fgen(call)
+#    for arg in call.arguments:
+#        if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
+#            if arg.name in map_dim[1]:
+#                new_arg=map_dim[1][arg.name]
+#                new_arg_name=re.match("[a-zA-Z0-9_%]+", new_arg)
+#                match=find_arg(str_call, arg.name)
+#                if not match:
+#                    bprint("NO MATCH")
+#                if match.group(2): #if array already has some shapes: keep them and JBLK at the end.
+#                    new_arg_dim=match.group(2)[:-1]+",JBLK)"
+#                    new_arg=new_arg_name.group(0)+new_arg_dim
+#                    print("new_arg=", new_arg)
+#                    str_call=re.sub(regex, new_arg, str_call)
+#                else: #if array has no shape : add them and add JBLK
+#                    new_arg=map_dim[1][arg.name].replace(":)","JBLK)")
+#                    str_call=re.sub(regex, new_arg, str_call)
+#    return(str_call+"\n")
+#
+#def generate_non_call_args(args, lst_derive_type, str_body, map_dim):
+#    """ 
+#    Changes arrays that aren't in a call statement : 
+#    """
+##==========================================================    
+##get non calls
+##==========================================================    
+#    regex=r'CALL[a-zA-Z0-9\s%_]*\((?:(?!CALL\().|\n)*?\)'
+#    segs=re.split(regex, str_body)
+#    non_calls=[seg.strip() for seg in segs if seg.strip() != '']
+#    if non_calls:
+#        for non_call in non_calls:
+#            generate_call(non_calls, map_dim)
+##            non_call_old=non_call
+##            for arg in args:
+##                if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
+##                    if arg.name in lst_derive_type: #if 
+##                        match=re.match("[\w%]+", map_dim[1][arg.name])
+##                        if match: #arg in map_dim 
+##                            new_name=match.group(0)
+##                            regex=arg.name+"\([,:\w%\s]+\)" #match arg(JL, A%SSS, :)... 
+##                            match_arg=re.search(regex, non_call, flags=re.MULTILINE) #match arg, if arg in non_call 
+##                            if match_arg:
+##                                old_arg=match_arg.group(0)
+##                                #print("old_arg =", old_arg)
+##                                regex="([\w%]+)(\([,:\w%\s]+\))"
+##                                new_arg=old_arg[:-1]+", JBLK)"
+##                                #print("old_arg =", old_arg)
+##                                #print("new_arg =", new_arg)
+##
+##                                non_call=non_call.replace(old_arg, new_arg)
+##                                #print("non_call=", non_call)
+##                                
+##                                #str_body=str_body.replace(arg.name
+##                                #>>>TODO : ADD JBLK
+#        str_body=str_body.replace(non_call_old, non_call)
+##  #      print("str_body = ", str_body)
+##    else:
+##        print("no non-calls")
 #    return(str_body)    
 
 def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type):
+   """
+   Generates openmp compute code. 
+   :param calls: calls of the parallel region : calls=FindNodes(CallStatement).visit(region)
+   :param region: parallel region that is beging computed
+   :param args: variables of the region. FindVariables(unique=True).visit(region). A loop is done through args to change their names and idx
+   :param map_dim: map_dim[0] : old_var : new_var+dim 
+                   map_dim[1] : old_var : new_var+dim if derive_type; old_va+dim elif array
+   :param region_scalar: list of scalars used in the region. For PRIVATE clauses.
+   :param region_arrays: ??? TODO
+   :param lst_derive_type: lst of derived type that were already added to the routine spec. When looping through the region var, when a derive type is detected the array associated to it won't be added again to the routine spec.
+"""
    str_body=fgen(region.body)
-  # print("args = ", args)
-  # print("map_dim = ", map_dim)
-  # print("calls =", calls)
-  # print("str_body = ", str_body)
    str_body=generate_variables(args, str_body, map_dim)
-   #str_body=generate_non_call_args(args, map_dim, str_body, map_dim)
-#   for call in calls:
-##       str_call=generate_call(call, map_dim)
-#       regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
-#       str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
-##       str_openmp=str_openmp+str_call
-
    str_openmp=""
    code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
    str_openmp=str_openmp+code 
    if region_scalar:
-       #private="JBLK,"+",".join(region_scalar)
        private="JBLK"
    else:
        private="JBLK"
@@ -409,8 +410,7 @@ def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_
    str_openmp=str_openmp+code
    code="CALL YLCPG_BNDS%UPDATE (JBLK)\n"
    str_openmp=str_openmp+code
-   #add region body: 
-   str_openmp=str_openmp+str_body
+   str_openmp=str_openmp+str_body #add region body:
    str_openmp=str_openmp+"ENDDO\n"
 #   file1=open("myfile.txt", "w")
 #   file1.write(json.dumps(map_dim))
@@ -418,183 +418,139 @@ def generate_compute_openmp(calls, region, args, map_dim, region_scalar, region_
 
    return(str_openmp)
 
-def change_jl_loop(str_body, acc=None):
-   if acc:
-        code=acc
-   else:
-        code=""
-   
-   
-   str_jlon="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
-   str_jlon=code+str_jlon
-   code="YLCPG_BNDS%KIDIA = JLON\n"
-   str_jlon=str_jlon+code
-   code="YLCPG_BNDS%KFDIA = JLON\n"
-   str_jlon=str_jlon+code
-   code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-   str_jlon=str_jlon+code
-   code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-   str_jlon=str_jlon+code
-   regex="DO JLON.*"
-   str_body=re.sub(regex,str_jlon, str_body) #insert in str_body, at line DO JLON =, str_jlon
-   return(str_body)
+
+def generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type, parallelmethod):
+   """
+   Generates openmp single column compute code. 
+   1) Creation of the region : add jlon loop around CALL, add _OPENACC and YDSTACK in CALL, change variables, replace JLON loops by (loop + stack_l/stack_u ... + acc if needed)
+   2) generate pragma and loops : openmp or openacc
+   3) insert 2) in code => at each jlon loops and/or at jblk loop
+
+   :param calls: calls of the parallel region : calls=FindNodes(CallStatement).visit(region)
+   :param region: parallel region that is beging computed
+   :param args: variables of the region. FindVariables(unique=True).visit(region). A loop is done through args to change their names and idx
+   :param map_dim: map_dim[0] : old_var : new_var+dim 
+                   map_dim[1] : old_var : new_var+dim if derive_type; old_va+dim elif array
+   :param region_scalar: list of scalars used in the region. For PRIVATE clauses.
+   :param region_arrays: ??? TODO
+   :param lst_derive_type: lst of derived type that were already added to the routine spec. When looping through the region var, when a derive type is detected the array associated to it won't be added again to the routine spec.
+   """
+
+   def change_jl_loop(str_region, acc=None):
+      if acc:
+           code=acc
+      else:
+           code=""
+      
+      
+      str_jlon="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
+      str_jlon=code+str_jlon
+      code="YLCPG_BNDS%KIDIA = JLON\n"
+      str_jlon=str_jlon+code
+      code="YLCPG_BNDS%KFDIA = JLON\n"
+      str_jlon=str_jlon+code
+      code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+      str_jlon=str_jlon+code
+      code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+      str_jlon=str_jlon+code
+      regex="DO JLON.*"
+      str_region=re.sub(regex,str_jlon, str_region) #insert in str_region, at line DO JLON =, str_jlon
+      return(str_region)
  
-def generate_compute_openmpscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type):
-   str_body=fgen(region.body)
-   str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
-#   print("str_region1 = ", str_body)
-   str_body=add_lines(str_body, str_jlon)
-#   calls=FindNodes(CallStatement).visit(region)
-#   for call in calls:
-#       str_call=fgen(call)
-#       str_call=str_jlon[0]+"\n"+str_call+"\n"+str_jlon[1]
-#        
-#       new_call=irgrip.slurp_any_code(str_call)
-#       region=irgrip.insert_at_node(call, new_call, rootnode=region)
-       #breakpoint()
-##   if len(region)==1:
-##       region=region[0]
-##   else:
-##       region[1]
-
-#   region=loop_fusion.loops_fusion(region)    
-#   str_body=fgen(region.body)
-#   str_body=generate_non_call_args(args, lst_derive_type, str_body, map_dim)
-   #match call by regex, and replace them by new calls
-   for call in calls:
- 
-       str_call=fgen(call)
-       regex="CALL\s"+fgen(call.name)
-       call_name=re.match(regex, str_call).group(0)
-       #call_name=re.match("CALL\s[a-zA-Z0-9_]*", str_call).group(0)
-       str_call=str_call.replace(call_name, call_name+"_OPENACC")
-       str_call=str_call[:-2]+", YDSTACK=YLSTACK)\n"
-       regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
-       str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
-
-       #regex=fgen(call)
-       #str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
- #      #str_body=str_body.replace(fgen(call), str_call)
- #      str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
-
-   str_body=generate_variables(args, str_body, map_dim)
-   str_openmpscc=""
-   code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
-   str_openmpscc=str_openmpscc+code 
-   if region_scalar:
-       private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
-       #private="JBLK,"+",".join(region_scalar)
-   else:
-       private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
-   code=f"!$OMP PARALLEL DO PRIVATE ({private})\n"
-   str_openmpscc=str_openmpscc+code 
-   code="DO JBLK = 1, YDCPG_OPTS%KGPBLKS\n"
-   str_openmpscc=str_openmpscc+code
-   str_body=change_jl_loop(str_body)
-   str_openmpscc=str_openmpscc+str_body+"\n"
-
-   code="ENDDO\n"
-   str_openmpscc=str_openmpscc+code
+   def generate_pragma_openmpscc(region_scalar):
    
-  
-   return(str_openmpscc)
-
-def generate_compute_openaccscc(calls, region, args, map_dim, region_scalar, region_arrays, lst_derive_type):
-   str_body=fgen(region.body)
-   str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
-   #print("str_region1 = ", str_region)
-   str_body=add_lines(str_body, str_jlon)
-   #print("str_region2 = ", str_region)
-   #region=irgrip.slurp_any_code(str_region) #tuple where first element is an empty comment
-#   print("len_region =", len(region))
-#   calls=FindNodes(CallStatement).visit(region)
-#   for call in calls:
-#       str_call=fgen(call)
-#       str_call=str_jlon[0]+"\n"+str_call+"\n"+str_jlon[1]
-#        
-#       new_call=irgrip.slurp_any_code(str_call)
-#       region=irgrip.insert_at_node(call, new_call, rootnode=region)
-
-   #new_region=loop_fusion.loops_fusion(region)
-   #region=loop_fusion.loops_fusion(region)
-#   str_body=fgen(region.body)
-   #print("str_region3 = ", str_body)
-#   exit(1)
-#   str_body=generate_non_call_args(args, lst_derive_type, str_body, map_dim)
-   #print("str_region4 = ", str_body)
-   for call in calls:
-       str_call=fgen(call)
-       regex="CALL\s"+fgen(call.name)
-       call_name=re.match(regex, str_call).group(0)
-       #call_name=re.match("CALL\s[a-zA-Z0-9_]*", str_call).group(0)
-       str_call=str_call.replace(call_name, call_name+"_OPENACC")
-       str_call=str_call[:-2]+", YDSTACK=YLSTACK)\n"
-#       regex=fgen(call)
-#       print("fgen(call))= ", fgen(call))
-#       print("str_call=", str_call)
-       regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
-       #regex="CALL\s"+fgen(call.name)+"_OPENACC"+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
-      # match=re.search(regex, string, flags=re.MULTILINE)
-#       print("regex =", regex)
-#       str_body=str_body.replace(fgen(call), str_call)
-       str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
-
-#   print("str_region5 = ", str_body)
-   str_body=generate_variables(args, str_body, map_dim)
-   str_openaccscc=""
-   code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
-   str_openaccscc=str_openaccscc+code 
-   code="!$ACC PARALLEL LOOP GANG &\n"
-   str_openaccscc=str_openaccscc+code 
-   present="!$ACC&PRESENT("
-   count_present=0 #avoir having to long lines
-   for array in region_arrays:
-       if count_present==0:
-           present=present+array
-           count_present=1
+       str_openmpscc=""
+       code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
+       str_openmpscc=str_openmpscc+code 
+       if region_scalar:
+           private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
+           #private="JBLK,"+",".join(region_scalar)
        else:
-           if count_present%3==0:
-              present=present+", &\n"
-              present=present+"!$ACC&        "
-              present=present+array
-              count_present+=1
-           else:
-               present=present+","+array
-               count_present+=1
-             
-   present=present+") &\n"
-#   code=f"""
-#        !$ACC&PRESENT({present}) &\n 
-#   """
-   str_openaccscc=str_openaccscc+present
-#   str_openaccscc=str_openaccscc+code 
-   code="!$ACC&PRIVATE (JBLK) &\n"
-   str_openaccscc=str_openaccscc+code 
-   code="!$ACC&VECTOR_LENGTH (YDCPG_OPTS%KLON)\n"
-   str_openaccscc=str_openaccscc+code
-   code="DO JBLK = 1, YDCPG_OPTS%KGPBLKS\n"
-   str_openaccscc=str_openaccscc+code
+           private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
+       code=f"!$OMP PARALLEL DO PRIVATE ({private})\n"
+       str_openmpscc=str_openmpscc+code 
+       code="DO JBLK = 1, YDCPG_OPTS%KGPBLKS\n"
+       str_openmpscc=str_openmpscc+code
+       return(str_openmpscc)
 
-   if region_scalar:
-       #private="JBLK,"+",".join(region_scalar)
-       private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
-   else:
-       private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
-   code=f"""
-        !&ACC LOOP VECTOR &\n
-        !$ACC&PRIVATE ({private})\n"""
-   #str_openaccscc=str_openaccscc+code 
- #  print("str_body6= ", str_body)
-   str_body=change_jl_loop(str_body, code)
-  # print("str_body7= ", str_body)
-   str_openaccscc=str_openaccscc+str_body+"\n"
-   #print("str_body8= ", str_openaccscc)
+   def generate_pragma_openaccscc(region_arrays, region_scalar):
+       str_openaccscc=""
+       code="CALL YLCPG_BNDS%INIT (YDCPG_OPTS)\n"
+       str_openaccscc=str_openaccscc+code 
+       code="!$ACC PARALLEL LOOP GANG &\n"
+       str_openaccscc=str_openaccscc+code 
+       present="!$ACC&PRESENT("
+       count_present=0 #having to long lines, bug with !$acc as comments and lines to long
+       for array in region_arrays:
+           if count_present==0:
+               present=present+array
+               count_present=1
+           else:
+               if count_present%3==0:
+                  present=present+", &\n"
+                  present=present+"!$ACC&        "
+                  present=present+array
+                  count_present+=1
+               else:
+                   present=present+","+array
+                   count_present+=1
+                 
+       present=present+") &\n"
+#       code=f"""
+#            !$ACC&PRESENT({present}) &\n 
+#       """
+       str_openaccscc=str_openaccscc+present
+       code="!$ACC&PRIVATE (JBLK) &\n"
+       str_openaccscc=str_openaccscc+code 
+       code="!$ACC&VECTOR_LENGTH (YDCPG_OPTS%KLON)\n"
+       str_openaccscc=str_openaccscc+code
+       code="DO JBLK = 1, YDCPG_OPTS%KGPBLKS\n"
+       str_openaccscc=str_openaccscc+code
+
+       if region_scalar:
+           #private="JBLK,"+",".join(region_scalar)
+           private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
+       else:
+           private="JBLK, JLON, YLCPG_BNDS, YLSTACK"
+       code=f"""
+            !&ACC LOOP VECTOR &\n
+            !$ACC&PRIVATE ({private})\n"""
+       return(str_openaccscc, code)
+
+   str_region=fgen(region.body)
+   str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
+   str_region=add_lines(str_region, str_jlon) #add JLON loops around CALL statements
+   generate_call(calls, str_region) #add _OPENACC and YDSTACK
+   str_region=generate_variables(args, str_region, map_dim) #change variables (YL->Z_YL; +dim + JBLK)
+   if parallelmethod=="OPENMPSINGLECOLUMN":
+       str_scc=generate_pragma_openmpscc(region_scalar)
+       code_acc = ""
+   elif parallelmethod=="OPENACCSINGLECOLUMN":
+       str_scc, code_acc=generate_pragma_openaccscc(region_arrays, region_scalar)
+   str_region=change_jl_loop(str_region, code_acc)
+   str_scc=str_scc+str_region+"\n"
+
    code="ENDDO\n"
-   str_openaccscc=str_openaccscc+code
-#   code="ENDDO\n"
-#   str_openaccscc=str_openaccscc+code
+   str_scc=str_scc+code
+   
   
-   return(str_openaccscc)
+   return(str_scc)
+
+def generate_call(calls, str_body):
+    """
+    Changes the calls in calls : add _OPENACC to their name and YDSTACK=YLSTACK to the routine args.
+    :param calls: calls of the parallel region : calls=FindNodes(CallStatement).visit(region)
+    :param str_body: string of region
+    """
+    for call in calls:
+        str_call=fgen(call)
+        regex="CALL\s"+fgen(call.name)
+        call_name=re.match(regex, str_call).group(0)
+        str_call=str_call.replace(call_name, call_name+"_OPENACC")
+        str_call=str_call[:-2]+", YDSTACK=YLSTACK)\n"
+        regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
+        str_body=re.sub(regex,str_call, str_body) #insert in str_body, at line DO JLON =, str_jlon
+
 
 
 
