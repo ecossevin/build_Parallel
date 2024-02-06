@@ -35,9 +35,6 @@ def rm_jlon(region):
         loop_map[loop]=loop.body
     
     region=Transformer(loop_map).visit(region)
-    print("******************************************")
-    print("region1=", fgen(region.body))
-    print("******************************************")
     return(region)
 
 def add_lines(string, to_add):
@@ -102,13 +99,16 @@ def change_arrays(routine, dcls, lst_horizontal_size, map_dim):
 #******************************************************************
     verbose=False
     #verbose=True
-    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)")
-    field_new_lst=() #creation of objects
-    field_new_lst=field_new_lst+new_node
-    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('DELETE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)")
-    dfield_new_lst=() #deletion of objects
-    dfield_new_lst=dfield_new_lst+new_node
+###    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)")
+    str_field_new="IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)\n"
+###    field_new_lst=() #creation of objects
+###    field_new_lst=field_new_lst+new_node
+###    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('DELETE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)")
+    str_dfield_new="IF (LHOOK) CALL DR_HOOK ('DELETE_TEMPORARIES',0,ZHOOK_HANDLE_FIELD_API)\n"
+###    dfield_new_lst=() #deletion of objects
+###    dfield_new_lst=dfield_new_lst+new_node
 
+    str_spec=""
     for dcl in dcls:
         var_dcl=dcls[dcl]
         var=var_dcl.symbols[0]
@@ -119,16 +119,17 @@ def change_arrays(routine, dcls, lst_horizontal_size, map_dim):
         map_dim[0][var.name]="YL_"+var_routine.name+"("+dd+")"
         map_dim[1][var.name]=var_routine.name+"("+dd+")"
         str_node1=f"CLASS (FIELD_{d}RB), POINTER :: YL_{var_routine.name}"
-        new_var1=irgrip.slurp_any_code(str_node1)
+###        new_var1=irgrip.slurp_any_code(str_node1)
         if var_routine.type.kind:
                                    
             str_node2=f"{var_routine.type.dtype.name} (KIND={var_routine.type.kind.name}), POINTER :: {var_routine.name} ({dd})"
                       #         var_routine.type.dtype.name     var.type.kind.name
         else:
             str_node2=f"{var_routine.type.dtype.name}, POINTER :: {var_routine.name} ({dd})"
-            new_var2=irgrip.slurp_any_code(str_node2)
-        new_var2=irgrip.slurp_any_code(str_node2)
-        routine.spec=irgrip.insert_at_node(var_dcl, (new_var1, new_var2) , rootnode=routine.spec)
+###            new_var2=irgrip.slurp_any_code(str_node2)
+###        new_var2=irgrip.slurp_any_code(str_node2)
+        str_spec=str_spec+str_node1+"\n"+str_node2+"\n"
+###        routine.spec=irgrip.insert_at_node(var_dcl, (new_var1, new_var2) , rootnode=routine.spec)
         ubound="["
         lbound="["
         zero=True #if true, means that lbound=only zero
@@ -156,18 +157,29 @@ def change_arrays(routine, dcls, lst_horizontal_size, map_dim):
             field_str=f"CALL FIELD_NEW (YL_{var_routine.name}, UBOUNDS={ubound}, LBOUNDS={lbound}, PERSISTENT=.TRUE.)"
         dfield_str=f"IF (ASSOCIATED (YL_{var_routine.name})) CALL FIELD_DELETE (YL_{var_routine.name})"
         if verbose: print("field_str= ", field_str) 
-        field_node=irgrip.slurp_any_code(field_str)
-        dfield_node=irgrip.slurp_any_code(dfield_str)
-        field_new_lst=field_new_lst+field_node
-        dfield_new_lst=dfield_new_lst+dfield_node
+###        field_node=irgrip.slurp_any_code(field_str)
+###        dfield_node=irgrip.slurp_any_code(dfield_str)
+###        field_new_lst=field_new_lst+field_node
+###        dfield_new_lst=dfield_new_lst+dfield_node
+        str_field_new=str_field_new+"\n"+field_str
+        str_dfield_new=str_dfield_new+"\n"+dfield_str
         
-  
-    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',1,ZHOOK_HANDLE_FIELD_API)")
-    field_new_lst=field_new_lst+new_node
-    routine.body.insert(2, field_new_lst) #insert at 1 => after first LHOOK 
-    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('DELETE_TEMPORARIES',1,ZHOOK_HANDLE_FIELD_API)")
-    dfield_new_lst=dfield_new_lst+new_node
-    routine.body.insert(-2, dfield_new_lst) #insert at -1 => after last LHOOK 
+    node_spec=irgrip.slurp_any_code(str_spec)
+    routine.spec.insert(-1,node_spec)
+###    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',1,ZHOOK_HANDLE_FIELD_API)")
+    new_str="IF (LHOOK) CALL DR_HOOK ('CREATE_TEMPORARIES',1,ZHOOK_HANDLE_FIELD_API)"
+    str_field_new=str_field_new+"\n"+new_str
+###    field_new_lst=field_new_lst+new_node
+    field_new=irgrip.slurp_any_code(str_field_new)
+    routine.body.insert(2, field_new) #insert at 1 => after first LHOOK 
+###    routine.body.insert(2, field_new_lst) #insert at 1 => after first LHOOK 
+    new_str="IF (LHOOK) CALL DR_HOOK ('DELETE_TEMPORARIES',1,ZHOOK_HANDLE_FIELD_API)"
+###    new_node=irgrip.slurp_any_code("IF (LHOOK) CALL DR_HOOK ('DELETE_TEMPORARIES',1,ZHOOK_HANDLE_FIELD_API)")
+###    dfield_new=dfield_new+new_node
+    str_dfield_new=str_dfield_new+"\n"+new_str
+    dfield_new=irgrip.slurp_any_code(str_dfield_new)
+    routine.body.insert(-1, dfield_new) #insert at -1 => after last LHOOK 
+###    routine.body.insert(-2, dfield_new_lst) #insert at -1 => after last LHOOK 
 
 def InsertPragmaRegionInSources(sources):
     routines = sources.routines
@@ -497,17 +509,13 @@ def generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arr
    str_jlon=str_jlon+code
 
    region=rm_jlon(region)
-   print("******************************************")
-   print("region2=", fgen(region.body))
-   print("******************************************")
    str_region=fgen(region.body)
    
-   str_region=str_jlon+str_region #add horizontal loop at the top of the region.
    ###str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
    ###str_region=add_lines(str_region, str_jlon) #add JLON loops around CALL statements
    str_region=generate_call(calls, str_region) #add _OPENACC and YDSTACK 
    str_region=generate_variables(args, str_region, map_dim) #change variables (YL->Z_YL; +dim + JBLK)
-
+   str_region=str_jlon+str_region #add horizontal loop at the top of the region.
 
 
    code="ENDDO\n"
