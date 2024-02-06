@@ -277,8 +277,8 @@ def generate_variables(args, str_body_, map_dim):
 		    map_dim[1] : old_var : new_var+dim if derive_type; old_var+dim elif array
 
     """ 
-    #verbose=True
-    verbose=False
+    verbose=True
+    #verbose=False
 
 
     def find_arg(string, arg_name, regex):
@@ -296,12 +296,21 @@ def generate_variables(args, str_body_, map_dim):
 	"""
         match=re.finditer(regex, string, flags=re.MULTILINE)
         return(match)
+    if not str_body_:
+        bprint("no str body")
+     #iii=0
     for arg in args: 
+     #   iii+=1
+     #   print(iii)
+     #   print("arg =")
         if not (isinstance(arg, symbols.LogicalOr) or isinstance(arg, symbols.LogicalAnd)):
             if arg.name in map_dim[1]:
                 regex="(\\b"+fgen(arg.name)+"\\b)(\s*\([^)]*\))*"
                 new_arg=map_dim[1][arg.name]
                 new_arg_name=re.match("[a-zA-Z0-9_%]+", new_arg) #can use region_arrays to have directly name without dimensions...
+             #   print("PPstr_body_ = ", str_body_)
+             #   print("PParg.name =", arg.name)
+             #   print("PPregex = ", regex)
                 iter_match=find_arg(str_body_, arg.name, regex)
                 
                 if not iter_match:
@@ -309,12 +318,21 @@ def generate_variables(args, str_body_, map_dim):
                 else:
                     for match in reversed(list(iter_match)):
                         begin, end = match.start(), match.end()
+                       # print("lst_iter =", list(iter_match))
+                       # print("begin= ", begin)
+                       # print("end = ", end)
+                       # print("l_str_body_=", len(str_body_))
+                       # print("str_b_end=", str_body_[end:])
+                       # print("str_b_beg=", str_body_[:begin])
                         if match.group(2): #if array already has some shapes: keep them and add JBLK at the end.
                             new_arg_dim=match.group(2)[:-1]+",JBLK)"
                             new_arg=new_arg_name.group(0)+new_arg_dim
                             if verbose: print("new_arg=", new_arg)
                           #  str_body_=re.sub(regex, new_arg, str_body_)
                             str_body_ = str_body_[:begin]+new_arg+str_body_[end:]
+                        #    if new_arg=="ZRDG_CVGQ(JLON, JLEV,JBLK)":
+                        #        bprint("body")
+                        #        print(str_body_)
                         else: #if array has no shape : add them and add JBLK
                             new_arg=map_dim[1][arg.name].replace(":)","JBLK)")
                          #   str_body_=re.sub(regex, new_arg, str_body_)
@@ -467,16 +485,30 @@ def generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arr
 
    str_region=fgen(region.body)
    str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
+   if not str_region:
+       bprint("no str region 1")
+   print("str_region1 = ", str_region) 
    str_region=add_lines(str_region, str_jlon) #add JLON loops around CALL statements
+   if not str_region:
+       bprint("no str region 2")
+   print("str_region2 = ", str_region) 
    str_region=generate_call(calls, str_region) #add _OPENACC and YDSTACK 
+   if not str_region:
+       bprint("no str region 3")
+   print("str_region3 = ", str_region) 
    str_region=generate_variables(args, str_region, map_dim) #change variables (YL->Z_YL; +dim + JBLK)
+   if not str_region:
+       bprint("no str region 4")
+   print("str_region4 = ", str_region) 
 
    if parallelmethod=="OPENMPSINGLECOLUMN":
        str_scc=generate_pragma_openmpscc(region_scalar)
        code_acc = ""
    elif parallelmethod=="OPENACCSINGLECOLUMN":
        str_scc, code_acc=generate_pragma_openaccscc(region_arrays, region_scalar)
-   str_region=change_jl_loop(str_region, code_acc)
+   toto=change_jl_loop(str_region, code_acc)
+#   str_region=change_jl_loop(str_region, code_acc)
+   str_region=toto
    str_scc=str_scc+str_region+"\n"
 
    code="ENDDO\n"
@@ -500,6 +532,9 @@ def generate_call(calls, str_region):
         str_call=str_call.replace(call_name, call_name+"_OPENACC")
         str_call=str_call[:-1]+", YDSTACK=YLSTACK)\n"
         regex="CALL\s"+fgen(call.name)+"\([a-zA-Z0-9_%&\s:,\(\)]*\)"
+#        print("GENCALLregex =", regex)
+#        print("GENCALLstr_call =", str_call)
+#        print("GENCALLstr_region =", str_region)
         str_region=re.sub(regex,str_call, str_region, flags=re.MULTILINE) #insert in str_region, at the place of the call
         return(str_region)
     
