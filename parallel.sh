@@ -69,7 +69,8 @@ dir=$(dirname $f)
 echo "DIR = $dir"
 echo "RESOLVE = $(resolve $f)"
 g=$(resolve $f)
-python3 -m pdb -c continue ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
+python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
+#python3 -m pdb -c continue ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 
 #to_parallel.py$* src/local/$dir $(resolve $f)
   #pointerParallel.pl $* --use-acpy --types-fieldapi-dir types-fieldapi --post-parallel synchost,nullify --version --dir src/local/$dir $(resolve $f)

@@ -25,6 +25,20 @@ def bprint(string, size=45, t="star", edge=3):
 
 
 
+def rm_jlon(region):
+    loops=[loop for loop in FindNodes(ir.Loop).visit(region)]
+    loops_jlon=[loop for loop in loops if loop.variable=="JLON"]
+    
+    loop_map={}
+    
+    for loop in loops_jlon:
+        loop_map[loop]=loop.body
+    
+    region=Transformer(loop_map).visit(region)
+    print("******************************************")
+    print("region1=", fgen(region.body))
+    print("******************************************")
+    return(region)
 
 def add_lines(string, to_add):
     """ In string: to_add before and after each line where the regex matches. 
@@ -378,31 +392,31 @@ def generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arr
    :param lst_derive_type: lst of derived type that were already added to the routine spec. When looping through the region var, when a derive type is detected the array associated to it won't be added again to the routine spec.
    """
 
-   def change_jl_loop(str_region, acc=None):
-       """
-       Change JLON loops in loops with stack statements.
-       :param str_region: string of the region.
-       :param acc: only for acc code: add ACC declarations before the JLON statement.
-       """
-       if acc:
-           code=acc
-       else:
-           code=""
-      
-      
-       str_jlon="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
-       str_jlon=code+str_jlon
-       code="YLCPG_BNDS%KIDIA = JLON\n"
-       str_jlon=str_jlon+code
-       code="YLCPG_BNDS%KFDIA = JLON\n"
-       str_jlon=str_jlon+code
-       code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-       str_jlon=str_jlon+code
-       code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
-       str_jlon=str_jlon+code
-       regex="DO JLON.*"
-       str_region=re.sub(regex,str_jlon, str_region) #insert in str_region, at line DO JLON =, str_jlon
-       return(str_region)
+#   def change_jl_loop(str_region, acc=None):
+#       """
+#       Change JLON loops in loops with stack statements.
+#       :param str_region: string of the region.
+#       :param acc: only for acc code: add ACC declarations before the JLON statement.
+#       """
+#       if acc:
+#           code=acc
+#       else:
+#           code=""
+#      
+#      
+#       str_jlon="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
+#       str_jlon=code+str_jlon
+#       code="YLCPG_BNDS%KIDIA = JLON\n"
+#       str_jlon=str_jlon+code
+#       code="YLCPG_BNDS%KFDIA = JLON\n"
+#       str_jlon=str_jlon+code
+#       code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+#       str_jlon=str_jlon+code
+#       code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+#       str_jlon=str_jlon+code
+#       regex="DO JLON.*"
+#       str_region=re.sub(regex,str_jlon, str_region) #insert in str_region, at line DO JLON =, str_jlon
+#       return(str_region)
  
    def generate_pragma_openmpscc(region_scalar):
    
@@ -463,27 +477,46 @@ def generate_compute_scc(calls, region, args, map_dim, region_scalar, region_arr
 #            !$ACC LOOP VECTOR &\n
 #            !$ACC&PRIVATE ({private})\n"""
        code=f"!$ACC LOOP VECTOR PRIVATE ({private}) \n"
-       return(str_openaccscc, code)
+       str_openaccscc=str_openaccscc+code
+       return(str_openaccscc)
 
+   if parallelmethod=="OPENMPSINGLECOLUMN":
+       str_jlon=generate_pragma_openmpscc(region_scalar)
+   elif parallelmethod=="OPENACCSINGLECOLUMN":
+       str_jlon=generate_pragma_openaccscc(region_arrays, region_scalar)
+
+   code="DO JLON = 1, MIN (YDCPG_OPTS%KLON, YDCPG_OPTS%KGPCOMP - (JBLK - 1) * YDCPG_OPTS%KLON)\n"
+   str_jlon=str_jlon+code
+   code="YLCPG_BNDS%KIDIA = JLON\n"
+   str_jlon=str_jlon+code
+   code="YLCPG_BNDS%KFDIA = JLON\n"
+   str_jlon=str_jlon+code
+   code="YLSTACK%L = stack_l (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+   str_jlon=str_jlon+code
+   code="YLSTACK%U = stack_u (YSTACK, JBLK, YDCPG_OPTS%KGPBLKS)\n"
+   str_jlon=str_jlon+code
+
+   region=rm_jlon(region)
+   print("******************************************")
+   print("region2=", fgen(region.body))
+   print("******************************************")
    str_region=fgen(region.body)
-   str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
-   str_region=add_lines(str_region, str_jlon) #add JLON loops around CALL statements
+   
+   str_region=str_jlon+str_region #add horizontal loop at the top of the region.
+   ###str_jlon=["DO JLON=YDCPG_BNDS%KIDIA,YDCPG_BNDS%KFDIA", "ENDDO"]
+   ###str_region=add_lines(str_region, str_jlon) #add JLON loops around CALL statements
    str_region=generate_call(calls, str_region) #add _OPENACC and YDSTACK 
    str_region=generate_variables(args, str_region, map_dim) #change variables (YL->Z_YL; +dim + JBLK)
 
-   if parallelmethod=="OPENMPSINGLECOLUMN":
-       str_scc=generate_pragma_openmpscc(region_scalar)
-       code_acc = ""
-   elif parallelmethod=="OPENACCSINGLECOLUMN":
-       str_scc, code_acc=generate_pragma_openaccscc(region_arrays, region_scalar)
-   str_region=change_jl_loop(str_region, code_acc)
-   str_scc=str_scc+str_region+"\n"
+
 
    code="ENDDO\n"
-   str_scc=str_scc+code
-   
+   str_region=str_region+code
+   code="ENDDO\n"
+   str_region=str_region+code
   
-   return(str_scc)
+  
+   return(str_region)
 
 def generate_call(calls, str_region):
     """
