@@ -688,7 +688,7 @@ def compute_region(routine, args, field_index, region_arrays, region_scalar, lst
 #==========================================================    
                 if arg_name__ in lst_derive_type: 
                     new_name="Z_"+arg_name.replace("%","_")
-                    region_arrays[new_name]=arg_name__ #????
+                    region_arrays[new_name]=[arg_name__, arg.name] #????
                     new_arg=arg.clone(name=new_name)  #useless?
 #==========================================================    
 #I-2) derive_type not in lst_derive_type but in index
@@ -697,7 +697,7 @@ def compute_region(routine, args, field_index, region_arrays, region_scalar, lst
                 elif (var_routine.type.dtype.name+"%"+arg_name_ in field_index):  
                 #elif arg_name in var_routine.type.dtype.name+"%"+arg_name_ in field_index: #2) derive_type in index 
                     new_name="Z_"+arg_name.replace("%","_")
-                    region_arrays[new_name]=arg_name__
+                    region_arrays[new_name]=[arg_name__, arg.name]
                     new_arg=arg.clone(name=new_name) #useless?
                     lst_derive_type.append(arg_name__)
                     key=var_routine.type.dtype.name+'%'+arg_name_
@@ -741,7 +741,7 @@ def compute_region(routine, args, field_index, region_arrays, region_scalar, lst
 #==========================================================    
                 if arg.name in dcls:
                     arg_name=arg.name
-                    region_arrays[arg_name]="YL_"+arg_name #region_arrays[Z_A]=YL_ZA
+                    region_arrays[arg_name]=["YL_"+arg_name, arg.name] #region_arrays[Z_A]=YL_ZA
                     if verbose:
                         to_print=f"adding {arg_name} to region_arrays"
                         bprint(to_print)
@@ -773,9 +773,10 @@ def generate_get_data(region_arrays, machine, area, subname, name, map_region_in
     map_intent_access['out']="RDWR"
     map_intent_access['inout']="RDWR"
 
+    #verbose=True
     verbose=False
-    intent=False
-    #intent=True
+    #intent=False
+    intent=True
 
     str_get_data=""
     strhook=f"{subname}:{name}:{area}"
@@ -786,8 +787,13 @@ def generate_get_data(region_arrays, machine, area, subname, name, map_region_in
         lhs=var
         if verbose: print("region_arrays[lhs]  = ",  region_arrays[lhs])
         if intent:
-            access_type = map_intent_access[map_region_intent[lhs]]
-            datacode=f"{lhs} => GET_{machine}_DATA_{access_type} ({region_arrays[lhs]})\n"
+            if region_arrays[lhs][1] in map_region_intent:
+                access_type = map_intent_access[map_region_intent[region_arrays[lhs][1]]]
+                #access_type = map_intent_access[map_region_intent[lhs]]
+            else: #default RDWR
+                access_type = "RDWR"
+
+            datacode=f"{lhs} => GET_{machine}_DATA_{access_type} ({region_arrays[lhs][0]})\n"
 
     #    #============================================================
     #    #TODO : get intent
@@ -799,8 +805,10 @@ def generate_get_data(region_arrays, machine, area, subname, name, map_region_in
     #    #field_="%".join(field.split("%")[:-1])+"%F_"+field.split("%")[-1:] # A%B%C => A%B%F_C
     #    #datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({field_})\n"
         if not intent: #all intent are set to RDWR
-            datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({region_arrays[lhs]})\n"
-            str_get_data=str_get_data+datacode
+            datacode=f"{lhs} => GET_{machine}_DATA_RDWR ({region_arrays[lhs][0]})\n"
+
+        str_get_data=str_get_data+datacode
+
     hookcode=lhook(strhook, "1", "FIELD_API")
     str_get_data=str_get_data+hookcode
     return(str_get_data)
@@ -1074,8 +1082,9 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
         
         read_interface(calls,path_interface, map_intent, map_region_intent) #create map_intent[calls]
         #exit(1)
-        print("OOmap_intent =", map_intent)
-        print("OOmap_region_intent =", map_region_intent)
+        if verbose: 
+            print("Interface map_intent =", map_intent)
+            print("Interface map_region_intent =", map_region_intent)
         
         
         name=region['name']
