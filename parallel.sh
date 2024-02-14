@@ -3,6 +3,7 @@
 set -x
 set -e
 
+#source ~/venv-opt/bin/activate
 source ~/venv/bin/activate
 which python3
 
@@ -69,7 +70,10 @@ dir=$(dirname $f)
 echo "DIR = $dir"
 echo "RESOLVE = $(resolve $f)"
 g=$(resolve $f)
+#python3 -m cProfile -o out.txt -s cumulative ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
+#python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
+#python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 #python3 -m pdb -c continue ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 
 #to_parallel.py$* src/local/$dir $(resolve $f)
