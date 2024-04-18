@@ -2,8 +2,6 @@ import sys
 from loki import *
 from pathlib import Path
 import re
-import json
-import copy
 
 
 
@@ -920,12 +918,10 @@ def analyse_intent(intent1, intent2):
 ##*********************************************************
 ##*********************************************************
 
-import sys
 path_irgrip="/home/gmap/mrpm/cossevine/kilo/src/acdc/loki"
 sys.path.append(path_irgrip)
 import irgrip
 
-import logical_lst
 import logical
 import pickle
 
@@ -960,7 +956,6 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     
     if verbose: print('pathr=', pathr)
     if verbose: print('pathw=', pathw)
-    import logical_lst
 ###    horizontal=Dimension(name='horizontal',size='KLON',index='JLON',bounds=['KIDIA','KFDIA'],aliases=['NPROMA','KDIM%KLON','D%INIT'])
 ###    vertical=Dimension(name='vertical',size='KLEV',index='JLEV')
 ###    
