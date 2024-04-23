@@ -875,8 +875,8 @@ def generate_get_data(region_arrays, machine, area, subname, name, map_region_in
 
     # verbose=True
     verbose = False
-    # intent=False
-    intent = True
+    intent=False
+    #intent = True
 
     str_get_data = ""
     strhook = f"{subname}:{name}:{area}"
@@ -987,7 +987,7 @@ def read_interface(calls, path_interface, map_intent, map_region_intent):
             #            call_path=call_path.replace(".F90",".intfb.h")
             if debug:
                 call_path = (
-                    "/home/gmap/mrpm/cossevine/build_Parallel/"
+                    "/home/cossevine/build_Parallel/"
                     + "src/"
                     + call_name
                     + ".intfb.h"
@@ -1047,11 +1047,13 @@ def analyse_intent(intent1, intent2):
 ##*********************************************************
 ##*********************************************************
 
-path_irgrip = "/home/gmap/mrpm/cossevine/kilo/src/acdc/loki"
+#path_irgrip = "/home/gmap/mrpm/cossevine/kilo/src/acdc/loki"
+path_irgrip = "/home/cossevine/kilo/src/acdc/loki"
 sys.path.append(path_irgrip)
 import irgrip
 
 import logical
+import logical_lst
 import pickle
 
 import click
@@ -1081,6 +1083,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     # ----------------------------------------------
     verbose = True
     # verbose=False
+    intent = False
     print("pathpack =", pathpack)
     print("pathview =", pathview)
     print("pathfile =", pathfile)
@@ -1217,7 +1220,8 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
         Pragma = PragmaRegions[i]
         calls = [call for call in FindNodes(CallStatement).visit(region["region"])]
 
-        read_interface(
+        if intent:
+            read_interface(
             calls, path_interface, map_intent, map_region_intent
         )  # create map_intent[calls]
         # exit(1)
@@ -1272,7 +1276,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
         node_target = irgrip.slurp_any_code(code_region)
         routine.body = irgrip.insert_at_node(Pragma, node_target, rootnode=routine.body)
 
-    Sourcefile.to_file(fgen(routine), Path(pathw + ".F90"))
+    Sourcefile.to_file(fgen(routine), Path(pathw + "_loki.F90"))
 
 
 # *********************************************************

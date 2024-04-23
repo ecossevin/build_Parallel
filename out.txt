@@ -1,0 +1,20 @@
+[Loki::Sourcefile] Constructed from /home/cossevine/build_Parallel/src/apl_arpege.F90 in 3.63s
+pathpack = /home/cossevine/build_Parallel
+pathview = src
+pathfile = /apl_arpege.F90
+pathr= /home/cossevine/build_Parallel/src/apl_arpege.F90
+pathw= /home/cossevine/build_Parallel/src/apl_arpege_parallel
+Traceback (most recent call last):
+  File "/home/cossevine/build_Parallel/to_parallel.py", line 1287, in <module>
+    parallel_trans()
+  File "/home/cossevine/loki_env/lib/python3.10/site-packages/click/core.py", line 1157, in __call__
+    return self.main(*args, **kwargs)
+  File "/home/cossevine/loki_env/lib/python3.10/site-packages/click/core.py", line 1078, in main
+    rv = self.invoke(ctx)
+  File "/home/cossevine/loki_env/lib/python3.10/site-packages/click/core.py", line 1434, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+  File "/home/cossevine/loki_env/lib/python3.10/site-packages/click/core.py", line 783, in invoke
+    return __callback(*args, **kwargs)
+  File "/home/cossevine/build_Parallel/to_parallel.py", line 1138, in parallel_trans
+    true_symbols, false_symbols = logical_lst.symbols()
+NameError: name 'logical_lst' is not defined. Did you mean: 'LogicalNot'?
