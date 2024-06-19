@@ -4,7 +4,8 @@ set -x
 set -e
 
 #source ~/venv-opt/bin/activate
-source ~/venv/bin/activate
+#source ~/venv/bin/activate
+source ~/loki_fork/loki/loki_env/bin/activate
 which python3
 
 export PATH=/home/gmap/mrpm/cossevine/build_Parallel:$PATH
@@ -71,7 +72,7 @@ echo "DIR = $dir"
 echo "RESOLVE = $(resolve $f)"
 g=$(resolve $f)
 #python3 -m cProfile -o out.txt -s cumulative ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
-python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
+python3 ~/build_Parallel/process.py --pathpack $p --pathview $g --pathfile $f 
 #python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 #python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 #python3 -m pdb -c continue ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
