@@ -25,10 +25,11 @@ def process(src_file, src_name):
     logical.transform_subroutine(routine, true_symbols, false_symbols)
     transformation.apply(routine, item=item)
     #transformation.apply(source[src_name], item=item)
-    Sourcefile.to_file(fgen(routine, linewidth=128), Path("src/out.F90"))
+    Sourcefile.to_file(fgen(routine, linewidth=128), Path("src/arpege/out.F90"))
 #    breakpoint()
 
-src_file = "src/apl_arpege_loki2.F90"
+src_file = "src/arpege/apl_arpege_bench_loki.F90"
+#src_file = "src/apl_arpege_loki2.F90"
 src_name = 'apl_arpege'
 
 #src_file = "src/dispatch_routine2.F90"

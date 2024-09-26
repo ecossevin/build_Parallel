@@ -71,7 +71,6 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     if verbose:
         print("pathw=", pathw)
     source = Sourcefile.from_file(pathr)
-    true_symbols, false_symbols = logical_lst.symbols()
 
     item = ProcedureItem(name='parallel_routine_dispatch', source=source)
     routine = source.subroutines[0]
@@ -82,7 +81,9 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
             "KPROMA", "YDDIM%NPROMA", "NPROMA"
     ]
     path_map_index = "/home/gmap/mrpm/cossevine/build_Parallel/field_index_new.pkl"
+    breakpoint()
     transformation = ParallelRoutineDispatchTransformation(is_intent, horizontal, path_map_index)
+    true_symbols, false_symbols = logical_lst.symbols()
 
     # ----------------------------------------------
     # transformation:

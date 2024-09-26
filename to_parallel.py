@@ -280,16 +280,16 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
 
     subname = routine.name
 
-        if intent:
-            read_interface(
-            calls, path_interface, map_intent, map_region_intent
-        )  # create map_intent[calls]
-        # exit(1)
-        if verbose:
-            print("Interface map_intent =", map_intent)
-            print("Interface map_region_intent =", map_region_intent)
+    if intent:
+        read_interface(
+        calls, path_interface, map_intent, map_region_intent
+    )  # create map_intent[calls]
+    # exit(1)
+    if verbose:
+        print("Interface map_intent =", map_intent)
+        print("Interface map_region_intent =", map_region_intent)
 
-        args = FindVariables(unique=True).visit(region)
+    args = FindVariables(unique=True).visit(region)
     Sourcefile.to_file(fgen(routine), Path(pathw + "_loki.F90"))
 
 
