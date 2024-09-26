@@ -1,5 +1,0 @@
-pathpack = /home/cossevine/build_Parallel
-pathview = src
-pathfile = /apl_arpege.F90
-pathr= /home/cossevine/build_Parallel/src/apl_arpege.F90
-pathw= /home/cossevine/build_Parallel/src/apl_arpege_parallel
