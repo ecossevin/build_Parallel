@@ -72,7 +72,7 @@ echo "DIR = $dir"
 echo "RESOLVE = $(resolve $f)"
 g=$(resolve $f)
 #python3 -m cProfile -o out.txt -s cumulative ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
-python3 ~/build_Parallel/main.py --pathpack $p --pathview $g --pathfile $f 
+python3 ~/build_Parallel/transformation/process.py --pathpack $p --pathview $g --pathfile $f 
 #python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 #python3 ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 #python3 -m pdb -c continue ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 

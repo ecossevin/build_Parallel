@@ -1,15 +1,14 @@
 import sys
+from pathlib import Path
+import re
+import pickle
+import click
+
 from loki import *
 from transformations.parallel_routine_dispatch import ParallelRoutineDispatchTransformation
 
-from pathlib import Path
-import re
-
 import logical
 import logical_lst
-import pickle
-
-import click
 
 
 
@@ -80,7 +79,7 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
             "KLON", "YDCPG_OPTS%KLON", "YDGEOMETRY%YRDIM%NPROMA",
             "KPROMA", "YDDIM%NPROMA", "NPROMA"
     ]
-    path_map_index = "/home/gmap/mrpm/cossevine/build_Parallel/field_index_new.pkl"
+    path_map_index = "/home/gmap/mrpm/cossevine/build_Parallel/src/field_index_new.pkl"
     breakpoint()
     transformation = ParallelRoutineDispatchTransformation(is_intent, horizontal, path_map_index)
     true_symbols, false_symbols = logical_lst.symbols()

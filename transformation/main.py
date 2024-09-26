@@ -1,8 +1,9 @@
-from loki import Sourcefile, ProcedureItem, fgen
 from pathlib import Path
-from loki import resolve_associates
-from transformations.parallel_routine_dispatch import ParallelRoutineDispatchTransformation
 import sys 
+
+from transformations.parallel_routine_dispatch import ParallelRoutineDispatchTransformation
+from loki import resolve_associates
+from loki import Sourcefile, ProcedureItem, fgen
 
 import logical
 import logical_lst
@@ -17,7 +18,7 @@ def process(src_file, src_name):
             "KLON", "YDCPG_OPTS%KLON", "YDGEOMETRY%YRDIM%NPROMA",
             "KPROMA", "YDDIM%NPROMA", "NPROMA"
     ]
-    path_map_index = "/home/gmap/mrpm/cossevine/build_Parallel/field_index_new.pkl"
+    path_map_index = "/home/gmap/mrpm/cossevine/build_Parallel/src/field_index_new.pkl"
     transformation = ParallelRoutineDispatchTransformation(is_intent, horizontal, path_map_index)
     true_symbols, false_symbols = logical_lst.symbols()
 
