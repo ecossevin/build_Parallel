@@ -1,5 +1,2 @@
 main.py : transformation on one file in ./src/arpege or ./src/test
-process.py : transformation in a pack
-to_parallel.py : old fucntions that can be reused
-
-TODO : merge common parts in main.py and process.py, rm to_parallel.py
+parallel_setup.py : setup the transformation and calls it

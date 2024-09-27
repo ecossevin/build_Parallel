@@ -10,52 +10,8 @@ from transformations.parallel_routine_dispatch import ParallelRoutineDispatchTra
 import logical
 import logical_lst
 
-
-
-def bprint(string, size=45, t="star", edge=3):
-    """
-    Print ***********************
-          ***      string     ***
-          ***********************
-    :param string: string to print
-    :param size: size of the "****************" line
-    :param t: symbole the line is made of
-    :param edge: size of the edge, here 3: "***"
-    """
-    l = len(string)
-    e = (size - l) // 2
-    r = (size - l) % 2
-    if t == "star":
-        tt = "*"
-    print(tt * size)
-    print(tt * edge + " " * (e - edge) + string + " " * (e - edge + r) + tt * edge)
-    print(tt * size)
-
-@click.command()
-# @click.option('--pathr', help='path of the file to open')
-# @click.option('--pathw', help='path of the file to write to')
-@click.option("--pathpack", help="absolute path to the pack")
-@click.option("--pathview", help="path to src/local/... or src/main/...")
-@click.option("--pathfile", help="path to the file, with the file name in the path")
-@click.option(
-    "--horizontal_opt", default=None, help="additionnal possible horizontal idx"
-)
-@click.option(
-    "--inlined",
-    "-in",
-    default=None,
-    multiple=True,
-    help="names of the routine to inline",
-)
-def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
-    global map_variables
-
-    # ----------------------------------------------
-    # setup
-    # ----------------------------------------------
+def init_path(pathpack, pathview, pathfile, horizontal_opt, inlined):
     verbose = True
-    # verbose=False
-    intent = False
     if verbose :print("pathpack =", pathpack)
     if verbose :print("pathview =", pathview)
     if verbose :print("pathfile =", pathfile)
@@ -69,6 +25,21 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
         print("pathr=", pathr)
     if verbose:
         print("pathw=", pathw)
+    return(pathr, pathw)
+
+def call_parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
+    pathr, pathw = init_path(pathpack, pathview, pathfile, horizontal_opt, inlined)
+    parallel_trans(pathr, pathw)
+
+def parallel_trans(pathr, pathw):
+    global map_variables
+
+    # ----------------------------------------------
+    # setup
+    # ----------------------------------------------
+    verbose = True
+    # verbose=False
+    intent = False
     source = Sourcefile.from_file(pathr)
 
     item = ProcedureItem(name='parallel_routine_dispatch', source=source)
@@ -80,7 +51,6 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
             "KPROMA", "YDDIM%NPROMA", "NPROMA"
     ]
     path_map_index = "/home/gmap/mrpm/cossevine/build_Parallel/src/field_index_new.pkl"
-    breakpoint()
     transformation = ParallelRoutineDispatchTransformation(is_intent, horizontal, path_map_index)
     true_symbols, false_symbols = logical_lst.symbols()
 
@@ -115,15 +85,15 @@ def parallel_trans(pathpack, pathview, pathfile, horizontal_opt, inlined):
     Sourcefile.to_file(fgen(routine, linewidth=128), Path(pathw))
 
 
-# *********************************************************
-# *********************************************************
-# *********************************************************
-#       Calling  the       transformation
-# *********************************************************
-# *********************************************************
-# *********************************************************
 
-parallel_trans()
-# namearg=sys.argv[1]
-# namearg=namearg.replace(".F90", "")
-# Sourcefile.to_file(source.to_fortran(), Path(namearg+"_out.F90"))
+
+def call_parallel_trans_dbg():
+    src_file = "src/arpege/apl_arpege_bench_loki.F90"
+    pathr = src_file 
+    pathw = "src/arpege/out.F90"
+    parallel_trans(pathr, pathw)
+
+
+
+if __name__ == "__main__":
+    call_parallel_trans_dbg()
