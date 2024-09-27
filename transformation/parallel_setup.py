@@ -9,6 +9,7 @@ from transformations.parallel_routine_dispatch import ParallelRoutineDispatchTra
 
 import logical
 import logical_lst
+from preprocess import get_preprocess_pragma
 
 def init_path(pathpack, pathview, pathfile, horizontal_opt, inlined):
     verbose = True
@@ -40,7 +41,21 @@ def parallel_trans(pathr, pathw):
     verbose = True
     # verbose=False
     intent = False
-    source = Sourcefile.from_file(pathr)
+    preprocess_pragma = False
+    dbg_enable = False
+
+    if preprocess_pragma: #change acdc pragma into loki pragma with end keyword
+        lines = get_preprocess_pragma(pathr)
+        lines = ''.join(lines)
+        if dbg_enable:
+            with open("src/arpege/test_preprocess__1.F90", "w", encoding='utf-8') as ff1:
+                ff1.write(lines)
+        source = Sourcefile.from_source(lines)
+        if dbg_enable:
+            with open("src/arpege/test_preprocess__2.F90", "w", encoding='utf-8') as ff2:
+                ff2.write(fgen(source))
+    else:
+        source = Sourcefile.from_file(pathr)
 
     item = ProcedureItem(name='parallel_routine_dispatch', source=source)
     routine = source.subroutines[0]
@@ -88,6 +103,7 @@ def parallel_trans(pathr, pathw):
 
 
 def call_parallel_trans_dbg():
+    #src_file = "src/arpege/apl_arpege_bench.F90"
     src_file = "src/arpege/apl_arpege_bench_loki.F90"
     pathr = src_file 
     pathw = "src/arpege/out.F90"
