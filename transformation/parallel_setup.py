@@ -41,19 +41,12 @@ def parallel_trans(pathr, pathw):
     verbose = True
     # verbose=False
     intent = False
-    preprocess_pragma = False
-    dbg_enable = False
+    preprocess_pragma = True
 
     if preprocess_pragma: #change acdc pragma into loki pragma with end keyword
         lines = get_preprocess_pragma(pathr)
         lines = ''.join(lines)
-        if dbg_enable:
-            with open("src/arpege/test_preprocess__1.F90", "w", encoding='utf-8') as ff1:
-                ff1.write(lines)
         source = Sourcefile.from_source(lines)
-        if dbg_enable:
-            with open("src/arpege/test_preprocess__2.F90", "w", encoding='utf-8') as ff2:
-                ff2.write(fgen(source))
     else:
         source = Sourcefile.from_file(pathr)
 
