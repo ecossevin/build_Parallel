@@ -21,6 +21,8 @@ def init_path(pathpack, pathview, pathfile, horizontal_opt, inlined):
 
     pathw = pathr.replace(".F90", "") + "_parallel.F90"
     pathw = pathw.replace("main", "local") 
+    pathw = pathw.replace("test/src", "test/loki")
+
 
     if verbose:
         print("pathr=", pathr)

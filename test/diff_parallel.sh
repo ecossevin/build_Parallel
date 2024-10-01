@@ -1,29 +1,8 @@
 #!/bin/bash
 
-set -x
-set -e
-
-source ~/loki_fork/loki/loki_env/bin/activate
-which python3
-
 export PATH=/home/gmap/mrpm/cossevine/build_Parallel:$PATH
 p=$(pwd)
 echo $p
-
-function resolve ()
-{
-  f=$1
-  for view in $(cat .gmkview)
-  do
-    g="src/$view/$f"
-    if [ -f $g ]
-    then
-#      echo $g
-      echo "src/$view/"
-      break
-    fi
-  done
-}
 
 #for f in \
 #  arpifs/phys_dmn/apl_arpege_init.F90                                    \
@@ -62,11 +41,10 @@ function resolve ()
 
 f=arpifs/phys_dmn/apl_arpege.F90
 echo "==> $f <=="
-
-# pointerParallel.pl --types-fieldapi-dir types-fieldapi --post-parallel synchost --only-if-newer --version src/local/$f 
 dir=$(dirname $f)
-echo "DIR = $dir"
-echo "RESOLVE = $(resolve $f)"
-g=$(resolve $f)
-#python3 -m cProfile -o out.txt -s cumulative ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
-python3  ~/build_Parallel/transformation/main.py --pathpack $p --pathview $g --pathfile $f 
+parallel=$(basename $f .F90)_parallel.F90
+
+echo $dir
+echo $parallel
+
+#diff parallel/$dir/$parallel loki/$dir/$parallel
