@@ -98,8 +98,9 @@ def parallel_trans(pathr, pathw):
 
 
 def call_parallel_trans_dbg():
-    #src_file = "src/arpege/apl_arpege_bench.F90"
-    src_file = "src/arpege/apl_arpege_bench_loki.F90"
+    src_file = "src/arpege/apl_arpege_bench.F90"
+    #src_file = "src/arpege/apl_wind_gust.F90"
+    #src_file = "src/arpege/mf_phys_mocon.F90"
     pathr = src_file 
     pathw = "src/arpege/out.F90"
     parallel_trans(pathr, pathw)

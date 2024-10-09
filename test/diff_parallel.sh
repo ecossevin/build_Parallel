@@ -48,3 +48,4 @@ echo $dir
 echo $parallel
 
 #diff parallel/$dir/$parallel loki/$dir/$parallel
+diff parallel/$dir/$parallel loki/$dir/$parallel
