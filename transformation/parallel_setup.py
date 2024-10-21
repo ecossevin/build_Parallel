@@ -98,7 +98,8 @@ def parallel_trans(pathr, pathw):
 
 
 def call_parallel_trans_dbg():
-    src_file = "src/arpege/apl_arpege_bench.F90"
+    #src_file = "src/arpege/apl_arpege_bench.F90"
+    src_file="/home/gmap/mrpm/cossevine/build_Parallel/test/src/arpifs/phys_dmn/apl_arpege_init.F90"
     #src_file = "src/arpege/apl_wind_gust.F90"
     #src_file = "src/arpege/mf_phys_mocon.F90"
     pathr = src_file 

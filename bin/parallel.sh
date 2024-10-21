@@ -59,12 +59,13 @@ function resolve ()
 #  arpifs/phys_dmn/acvppkf.F90
 #do
 #done
-#for f in \
-#  arpifs/phys_dmn/apl_arpege_init.F90                                    \
-#  arpifs/phys_dmn/apl_arpege_init_surfex.F90                             \
-#  arpifs/phys_dmn/apl_arpege_oceanic_fluxes.F90                          \
-#  arpifs/phys_dmn/apl_wind_gust.F90                                      \
-#  arpifs/phys_dmn/mf_phys_mocon.F90                                      \
+#  arpifs/phys_radi/recmwf.F90                                            \
+for f in \
+  arpifs/phys_dmn/apl_arpege_init.F90                                    \
+  arpifs/phys_dmn/apl_arpege_init_surfex.F90                             \
+  arpifs/phys_dmn/apl_arpege_oceanic_fluxes.F90                          \
+  arpifs/phys_dmn/apl_wind_gust.F90                                      \
+  arpifs/phys_dmn/mf_phys_mocon.F90                                      \
 #  arpifs/phys_dmn/apl_arpege_shallow_convection_and_turbulence.F90       \
 #  arpifs/phys_dmn/apl_arpege_albedo_computation.F90                      \
 #  arpifs/phys_dmn/apl_arpege_aerosols_for_radiation.F90                  \
@@ -91,10 +92,10 @@ function resolve ()
 #  arpifs/phys_dmn/mf_phys_fpl_part2.F90                                  \
 #  arpifs/phys_dmn/mf_phys_fpl_part1.F90                                  \
 #  arpifs/phys_dmn/acvppkf.F90
-#do
+do
 
 #f=arpifs/phys_dmn/apl_wind_gust.F90
-f=arpifs/phys_dmn/apl_arpege.F90
+#f=arpifs/phys_dmn/apl_arpege.F90
 echo "==> $f <=="
 
 # pointerParallel.pl --types-fieldapi-dir types-fieldapi --post-parallel synchost --only-if-newer --version src/local/$f 
@@ -105,4 +106,4 @@ g=$(resolve $f)
 #python3 -m cProfile -o out.txt -s cumulative ~/build_Parallel/to_parallel.py --pathpack $p --pathview $g --pathfile $f 
 python3  ~/build_Parallel/transformation/main.py --pathpack $p --pathview $g --pathfile $f 
 #python3 -m pdb  ~/build_Parallel/transformation/main.py --pathpack $p --pathview $g --pathfile $f 
-#done
+done

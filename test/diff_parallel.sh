@@ -4,12 +4,12 @@ export PATH=/home/gmap/mrpm/cossevine/build_Parallel:$PATH
 p=$(pwd)
 echo $p
 
-#for f in \
-#  arpifs/phys_dmn/apl_arpege_init.F90                                    \
-#  arpifs/phys_dmn/apl_arpege_init_surfex.F90                             \
-#  arpifs/phys_dmn/apl_arpege_oceanic_fluxes.F90                          \
-#  arpifs/phys_dmn/apl_wind_gust.F90                                      \
-#  arpifs/phys_dmn/mf_phys_mocon.F90                                      \
+for f in \
+  arpifs/phys_dmn/apl_arpege_init.F90                                    \
+  arpifs/phys_dmn/apl_arpege_init_surfex.F90                             \
+  arpifs/phys_dmn/apl_arpege_oceanic_fluxes.F90                          \
+  arpifs/phys_dmn/apl_wind_gust.F90                                      \
+  arpifs/phys_dmn/mf_phys_mocon.F90                                      \
 #  arpifs/phys_dmn/apl_arpege_shallow_convection_and_turbulence.F90       \
 #  arpifs/phys_dmn/apl_arpege_albedo_computation.F90                      \
 #  arpifs/phys_dmn/apl_arpege_aerosols_for_radiation.F90                  \
@@ -36,8 +36,7 @@ echo $p
 #  arpifs/phys_dmn/mf_phys_fpl_part2.F90                                  \
 #  arpifs/phys_dmn/mf_phys_fpl_part1.F90                                  \
 #  arpifs/phys_dmn/acvppkf.F90
-#do
-#done
+do
 
 f=arpifs/phys_dmn/apl_arpege.F90
 echo "==> $f <=="
@@ -49,3 +48,4 @@ echo $parallel
 
 #diff parallel/$dir/$parallel loki/$dir/$parallel
 diff parallel/$dir/$parallel loki/$dir/$parallel
+done
