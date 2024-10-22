@@ -16,7 +16,7 @@ for f in \
   arpifs/phys_dmn/apl_arpege_oceanic_fluxes.F90                          \
   arpifs/phys_dmn/apl_wind_gust.F90                                      \
   arpifs/phys_dmn/mf_phys_mocon.F90                                      \
-#  arpifs/phys_dmn/apl_arpege_shallow_convection_and_turbulence.F90       \
+  arpifs/phys_dmn/apl_arpege_shallow_convection_and_turbulence.F90       \
 #  arpifs/phys_dmn/apl_arpege_albedo_computation.F90                      \
 #  arpifs/phys_dmn/apl_arpege_aerosols_for_radiation.F90                  \
 #  arpifs/phys_dmn/apl_arpege_cloudiness.F90                              \
