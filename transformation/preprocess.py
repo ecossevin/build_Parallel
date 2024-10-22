@@ -11,5 +11,9 @@ def get_preprocess_pragma(src):
             elif '!$ACDC }' in line:
                 line = line.replace('!$ACDC }', '!$loki end parallel')
 
+            elif '!$ACDC {' in line:
+                line = line.replace('ACDC {', '') #if ACDC pragma is on multiple lines
+
+
             new_lines.append(line)
     return new_lines

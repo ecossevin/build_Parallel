@@ -10,6 +10,7 @@ export PATH=/home/gmap/mrpm/cossevine/build_Parallel:$PATH
 p=$(pwd)
 
 for f in \
+  arpifs/phys_dmn/apl_arpege.F90                                         \
   arpifs/phys_dmn/apl_arpege_init.F90                                    \
   arpifs/phys_dmn/apl_arpege_init_surfex.F90                             \
   arpifs/phys_dmn/apl_arpege_oceanic_fluxes.F90                          \
@@ -32,7 +33,6 @@ for f in \
 #  arpifs/adiab/cputqy0.F90                                               \
 #  arpifs/phys_dmn/mf_phys_transfer.F90                                   \
 #  arpifs/phys_dmn/apl_arpege_surface_update.F90                          \
-#  arpifs/phys_dmn/apl_arpege.F90                                         \
 #  arpifs/phys_dmn/mf_phys_prep.F90                                       \
 #  arpifs/phys_dmn/mf_phys_init.F90                                       \
 #  arpifs/phys_dmn/mf_phys.F90                                            \
