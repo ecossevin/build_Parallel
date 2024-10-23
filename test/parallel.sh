@@ -17,11 +17,10 @@ for f in \
   arpifs/phys_dmn/apl_wind_gust.F90                                      \
   arpifs/phys_dmn/mf_phys_mocon.F90                                      \
   arpifs/phys_dmn/apl_arpege_shallow_convection_and_turbulence.F90       \
-#  arpifs/phys_dmn/apl_arpege_albedo_computation.F90                      \
-#  arpifs/phys_dmn/apl_arpege_aerosols_for_radiation.F90                  \
-#  arpifs/phys_dmn/apl_arpege_cloudiness.F90                              \
-#  arpifs/phys_dmn/apl_arpege_radiation.F90                               \
-#  arpifs/phys_dmn/apl_arpege_soil_hydro.F90                              \
+  arpifs/phys_dmn/apl_arpege_albedo_computation.F90                      \
+  arpifs/phys_dmn/apl_arpege_aerosols_for_radiation.F90                  \
+  arpifs/phys_dmn/apl_arpege_cloudiness.F90                              \
+  arpifs/phys_dmn/apl_arpege_soil_hydro.F90                              \
 #  arpifs/phys_dmn/apl_arpege_deep_convection.F90                         \
 #  arpifs/phys_dmn/apl_arpege_surface.F90                                 \
 #  arpifs/phys_dmn/apl_arpege_precipitation.F90                           \
@@ -41,6 +40,7 @@ for f in \
 #  arpifs/phys_dmn/mf_phys_fpl_part2.F90                                  \
 #  arpifs/phys_dmn/mf_phys_fpl_part1.F90                                  \
 #  arpifs/phys_dmn/acvppkf.F90
+#  arpifs/phys_dmn/apl_arpege_radiation.F90                               \
 do
 #done
 
